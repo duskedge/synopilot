@@ -1,0 +1,67 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Editor & IDEs
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# Node / Web / Mobile Dependencies & Builds
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+dist/
+dist-ssr/
+build/
+out/
+.next/
+.turbo/
+.cache/
+
+# Mobile Frameworks (React Native / Flutter / Android / iOS)
+.expo/
+.dart_tool/
+android/.gradle/
+android/app/build/
+ios/Pods/
+ios/build/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Environment Variables & Secrets
+.env
+.env.local
+.env.*.local
+*.local
+*.pem
+*.key
+*.cert
+
+# Temporary & Logs
+logs/
+*.log
+*.tmp
+temp/
+
+# 本地文档（PRD、接口设计、原型、选型）不提交到 GitHub
+doc/
+
+# Android 签名文件：只存在本地和 GitHub Secrets 里，绝不提交
+*.jks
+*.keystore
+keystore.properties
+signing.properties

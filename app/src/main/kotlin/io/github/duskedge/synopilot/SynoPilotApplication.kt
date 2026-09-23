@@ -5,6 +5,7 @@ import io.github.duskedge.synopilot.data.dataModule
 import io.github.duskedge.synopilot.feature.containers.containersModule
 import io.github.duskedge.synopilot.feature.dashboard.dashboardModule
 import io.github.duskedge.synopilot.feature.downloads.downloadsModule
+import io.github.duskedge.synopilot.feature.files.filesModule
 import io.github.duskedge.synopilot.feature.onboarding.onboardingModule
 import io.github.duskedge.synopilot.feature.settings.settingsModule
 import io.github.duskedge.synopilot.updater.UpdateCheckWorker
@@ -36,6 +37,7 @@ class SynoPilotApplication : Application() {
                 dashboardModule,
                 containersModule,
                 downloadsModule,
+                filesModule,
                 settingsModule,
             )
         }

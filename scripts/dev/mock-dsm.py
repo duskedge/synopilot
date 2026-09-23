@@ -17,15 +17,19 @@
   Download Station    SYNO.DownloadStation.*
   qBittorrent WebUI   /api/v2/*（admin / adminadmin）
   Transmission RPC    /transmission/rpc（无密码，会先返回 409 要求会话 ID）
+  File Station        内存里的虚拟文件系统：浏览、搜索、上传、下载、缩略图、分享链接
 容器 qbittorrent / transmission 的端口映射指向这个端口，所以「自动发现」能直接用。
 """
 import argparse
+import base64
 import json
 import random
 import re
 import secrets
+import struct
 import threading
 import time
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
@@ -42,6 +46,9 @@ APIS = {
     "SYNO.DownloadStation.Info": {"path": "DownloadStation/info.cgi", "minVersion": 1, "maxVersion": 2},
     "SYNO.DownloadStation.Task": {"path": "DownloadStation/task.cgi", "minVersion": 1, "maxVersion": 3},
     "SYNO.DownloadStation.Statistic": {"path": "DownloadStation/statistic.cgi", "minVersion": 1, "maxVersion": 1},
+    **{f"SYNO.FileStation.{n}": {"path": "entry.cgi", "minVersion": 1, "maxVersion": v} for n, v in [
+        ("List", 2), ("Search", 2), ("CreateFolder", 2), ("Rename", 2), ("Delete", 2), ("Download", 2), ("Thumb", 2),
+        ("Upload", 3), ("Sharing", 3)]},
 }
 PORT = 5000
 LOCK = threading.Lock()
@@ -187,6 +194,179 @@ def tick():
             else:
                 t["speed"] = 0
             t["up"] = random.randint(100, 900) * 1024 if t["state"] in ("uploading", 6) else 0
+
+
+# ---- File Station：内存里的虚拟文件系统 ---------------------------------------
+def png(w, h, rgb):
+    """生成一张带渐变的 PNG（不依赖 PIL）"""
+    rows = b"".join(b"\x00" + bytes(v for x in range(w) for v in (
+        min(255, rgb[0] + x * 60 // w), min(255, rgb[1] + y * 60 // h), rgb[2])) for y in range(h))
+    chunk = lambda t, d: struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+
+
+NOW = int(time.time())
+FS = {}
+
+
+def fs_add(path, size=0, content=None, age=0, isdir=None):
+    FS[path] = {"isdir": isdir if isdir is not None else (size == 0 and content is None and "." not in path.rsplit("/", 1)[-1]),
+                "size": len(content) if content is not None else size, "mtime": NOW - age, "content": content}
+
+
+for d in ["/video", "/video/Movies", "/video/TV", "/docker", "/docker/jellyfin", "/docker/media", "/photo", "/photo/2026",
+          "/downloads", "/homes", "/homes/admin"]:
+    fs_add(d, isdir=True, age=random.randint(3600, 90 * 86400))
+fs_add("/video/Movies/Oppenheimer.2023.2160p.UHD.BluRay.x265.mkv", 58 * GB, age=5 * 86400)
+fs_add("/video/Movies/Dune.Part.Two.2024.2160p.mkv", 62 * GB, age=40 * 86400)
+fs_add("/video/Movies/poster.jpg", 412 * 1024, age=3600)
+fs_add("/video/TV/Shogun.S01E01.2160p.mkv", 7 * GB, age=2 * 86400)
+fs_add("/docker/media/compose.yaml", content=b"""services:
+  jellyfin:
+    image: jellyfin/jellyfin:10.10.3
+    ports: ["8096:8096"]
+    volumes:
+      - /volume1/docker/jellyfin:/config
+      - /volume1/video:/media:ro
+    restart: unless-stopped
+  qbittorrent:
+    image: linuxserver/qbittorrent:5.0.3
+    environment: [PUID=1026, PGID=100, TZ=Asia/Shanghai]
+""", age=86400 * 3)
+fs_add("/docker/jellyfin/log.txt", content=("\n".join(f"[2026-09-2{i % 10} 10:0{i % 6}:00] [INF] line {i}" for i in range(200))).encode(), age=600)
+for i in range(1, 7):
+    fs_add(f"/photo/2026/IMG_{2400 + i}.jpg", random.randint(2, 6) * MB, age=i * 86400)
+fs_add("/downloads/ubuntu-26.04-desktop-amd64.iso", int(6.1 * GB), age=7200)
+fs_add("/downloads/archive.zip", 18 * MB, age=86400 * 20)
+fs_add("/homes/admin/笔记.md", content="# 家里 NAS\n\n- 每周日 01:30 关机\n- 硬盘 3 需要换\n".encode(), age=300)
+SEARCHES = {}
+
+
+def fs_entry(path, share=False):
+    f = FS[path]
+    return {"isdir": f["isdir"], "name": path.rsplit("/", 1)[-1], "path": path,
+            "additional": {"size": f["size"], "time": {"mtime": f["mtime"]}, "real_path": "/volume1" + path if share else None,
+                           "type": "" if f["isdir"] else path.rsplit(".", 1)[-1].upper()}}
+
+
+def children(folder):
+    prefix = folder.rstrip("/") + "/"
+    return sorted(p for p in FS if p.startswith(prefix) and "/" not in p[len(prefix):])
+
+
+def json_list(value):
+    try:
+        v = json.loads(value)
+        return v if isinstance(v, list) else [v]
+    except (ValueError, TypeError):
+        return [x for x in (value or "").split(",") if x]
+
+
+def file_station(api, method, params):
+    name = api.rsplit(".", 1)[-1]
+    with LOCK:
+        if name == "List":
+            if method == "list_share":
+                shares = [p for p in FS if p.count("/") == 1]
+                return ok({"shares": [fs_entry(p, share=True) for p in sorted(shares)], "total": len(shares), "offset": 0})
+            folder = params.get("folder_path", "").strip('"')
+            if folder not in FS or not FS[folder]["isdir"]:
+                return err(408)
+            items = children(folder)
+            return ok({"files": [fs_entry(p) for p in items], "total": len(items), "offset": 0})
+        if name == "Search":
+            if method == "start":
+                pattern = params.get("pattern", "").strip("*").lower()
+                roots = json_list(params.get("folder_path"))
+                found = [p for p in FS if any(p.startswith(r.rstrip("/") + "/") for r in roots) and pattern in p.rsplit("/", 1)[-1].lower()]
+                tid = secrets.token_hex(4)
+                SEARCHES[tid] = found
+                return ok({"taskid": tid})
+            if method == "list":
+                found = SEARCHES.get(params.get("taskid"), [])
+                return ok({"files": [fs_entry(p) for p in found if p in FS], "total": len(found), "finished": True, "offset": 0})
+            SEARCHES.pop(params.get("taskid"), None)
+            return ok({})
+        if name == "CreateFolder":
+            path = params.get("folder_path", "").rstrip("/") + "/" + params.get("name", "")
+            if path in FS:
+                return err(414)
+            fs_add(path, isdir=True)
+            return ok({"folders": [fs_entry(path)]})
+        if name == "Rename":
+            path, new = params.get("path", ""), params.get("name", "")
+            if path not in FS:
+                return err(408)
+            target = path.rsplit("/", 1)[0] + "/" + new
+            if target in FS:
+                return err(414)
+            for p in [p for p in FS if p == path or p.startswith(path + "/")]:
+                FS[target + p[len(path):]] = FS.pop(p)
+            return ok({"files": [fs_entry(target)]})
+        if name == "Delete":
+            for path in json_list(params.get("path")):
+                for p in [p for p in FS if p == path or p.startswith(path + "/")]:
+                    FS.pop(p)
+            return ok({})
+        if name == "Sharing":
+            path = params.get("path", "")
+            if path not in FS:
+                return err(408)
+            sid = secrets.token_urlsafe(6)
+            qr = "data:image/png;base64," + base64.b64encode(png(120, 120, (20, 20, 20))).decode()
+            return ok({"links": [{"id": sid, "url": f"https://gofile.me/7aB3c/{sid}", "qrcode": qr, "path": path,
+                                  "date_expired": params.get("date_expired", ""), "has_password": bool(params.get("password"))}]})
+        if name in ("Download", "Thumb"):
+            path = params.get("path", "").strip('"')
+            f = FS.get(path)
+            if not f or f["isdir"]:
+                return err(408)
+            ext = path.rsplit(".", 1)[-1].lower()
+            if name == "Thumb" or ext in ("jpg", "jpeg", "png"):
+                size = {"small": 96, "medium": 240, "large": 480}.get(params.get("size"), 480)
+                seed = sum(path.encode()) % 180
+                return ("BYTES", png(size, size * 3 // 4, (40 + seed % 120, 80, 160 + seed % 90)), "image/png")
+            if f["content"] is not None:
+                return ("BYTES", f["content"], "application/octet-stream")
+            return ("BYTES", b"\0" * min(f["size"], 24 * MB), "application/octet-stream")
+    return err(103)
+
+
+def parse_multipart(body, ctype):
+    boundary = ctype.split("boundary=", 1)[-1].strip('"').encode()
+    fields, file_name, file_data = {}, None, b""
+    for part in body.split(b"--" + boundary):
+        if b"\r\n\r\n" not in part:
+            continue
+        head, data = part.split(b"\r\n\r\n", 1)
+        data = data[:-2] if data.endswith(b"\r\n") else data
+        head = head.decode("utf-8", "replace")
+        m = re.search(r'name="([^"]+)"', head)
+        fn = re.search(r'filename="([^"]*)"', head)
+        if fn:
+            file_name, file_data = fn.group(1), data
+        elif m:
+            fields[m.group(1)] = data.decode("utf-8", "replace")
+    return fields, file_name, file_data
+
+
+def upload(params, body, ctype):
+    fields, name, data = parse_multipart(body, ctype)
+    folder = fields.get("path", "/")
+    if not name:
+        return err(101)
+    path = folder.rstrip("/") + "/" + name
+    with LOCK:
+        if path in FS and fields.get("overwrite") not in ("true", "overwrite"):
+            return err(414)
+        # 模拟 create_parents
+        parts = folder.strip("/").split("/")
+        for i in range(1, len(parts) + 1):
+            d = "/" + "/".join(parts[:i])
+            if d not in FS:
+                fs_add(d, isdir=True)
+        fs_add(path, content=data if len(data) < 2 * MB else None, size=len(data), isdir=False)
+    return ok({})
 
 
 def download_station(api, method, params):
@@ -403,6 +583,8 @@ def handle(api, method, params):
             return docker(api, method, params)
     if api.startswith("SYNO.DownloadStation."):
         return download_station(api, method, params)
+    if api.startswith("SYNO.FileStation."):
+        return file_station(api, method, params)
     return err(103)
 
 
@@ -425,6 +607,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_bytes(self, data, ctype):
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        # 大文件分块发送，模拟真实的下载速度（约 12 MB/s）
+        for i in range(0, len(data), 256 * 1024):
+            self.wfile.write(data[i:i + 256 * 1024])
+            if len(data) > 4 * MB:
+                time.sleep(0.02)
+
     def _route(self):
         path = urlparse(self.path).path
         params, body = self._read()
@@ -434,7 +627,13 @@ class Handler(BaseHTTPRequestHandler):
             data = APIS if q == "all" else {k: v for k, v in APIS.items() if k in q.split(",")}
             return self._send(ok(data))
         if path.startswith("/webapi/"):
+            if params.get("api") == "SYNO.FileStation.Upload":
+                if params.get("_sid") not in SESSIONS:
+                    return self._send(err(119))
+                return self._send(upload(params, body, self.headers.get("Content-Type", "")))
             result = handle(params.get("api"), params.get("method"), params)
+            if isinstance(result, tuple) and result[0] == "BYTES":
+                return self._send_bytes(result[1], result[2])
             if result == "STREAM":
                 return self._send("Pulling...\nCreating...\nStarted\n", text=True)
             return self._send(result)

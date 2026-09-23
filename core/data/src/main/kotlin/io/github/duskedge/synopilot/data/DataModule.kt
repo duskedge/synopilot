@@ -24,5 +24,7 @@ fun dataModule(userAgent: String) = module {
     single { DashboardRepository(get(), get(), File(androidContext().cacheDir, "dashboard")) }
     single { ContainersRepository(get()) }
     single { DownloadsRepository(get(), get(), get(DSM_HTTP)) }
+    single { FilesRepository(get()) }
+    single { TransferManager(androidContext(), get(), get(APP_SCOPE)) }
     single { LanDiscovery(androidContext(), get(DSM_HTTP)) }
 }

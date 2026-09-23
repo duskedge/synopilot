@@ -37,6 +37,7 @@ dependencies {
     implementation(project(":feature:dashboard"))
     implementation(project(":feature:containers"))
     implementation(project(":feature:downloads"))
+    implementation(project(":feature:files"))
     implementation(project(":feature:settings"))
     implementation(libs.androidx.biometric)
 

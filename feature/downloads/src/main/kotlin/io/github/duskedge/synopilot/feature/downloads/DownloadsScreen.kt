@@ -366,7 +366,7 @@ private fun TaskCard(t: DownloadTask, stale: Boolean, engineName: String?, onCli
                 },
             )
         }
-        Row(Modifier.fillMaxWidth().padding(top = 6.dp, end = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth().padding(top = 6.dp, end = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(left, style = SpTheme.type.caption.copy(fontFamily = SpTheme.type.num.fontFamily), color = c.onSurfaceVariant, maxLines = 1)
             Text(
                 right,

@@ -66,6 +66,7 @@ import io.github.duskedge.synopilot.feature.containers.ContainersScreen
 import io.github.duskedge.synopilot.feature.dashboard.DashboardScreen
 import io.github.duskedge.synopilot.feature.downloads.DownloadersScreen
 import io.github.duskedge.synopilot.feature.downloads.DownloadsScreen
+import io.github.duskedge.synopilot.feature.files.FilesScreen
 import io.github.duskedge.synopilot.feature.onboarding.OnboardingScreen
 import io.github.duskedge.synopilot.feature.settings.DeviceSwitcherSheet
 import io.github.duskedge.synopilot.feature.settings.ServerAddressScreen
@@ -149,7 +150,7 @@ private fun MainScaffold(updateManager: UpdateManager) {
                 }
                 composable<ContainersRoute> { ContainersScreen() }
                 composable<DownloadsRoute> { DownloadsScreen(onOpenDownloaders = { nav.navigate(DownloadersRoute) }) }
-                composable<FilesRoute> { FilesPlaceholder() }
+                composable<FilesRoute> { FilesScreen() }
                 composable<SettingsRoute> {
                     SettingsScreen(
                         onOpenServerAddress = { nav.navigate(ServerAddressRoute) },

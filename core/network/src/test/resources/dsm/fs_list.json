@@ -1,0 +1,5 @@
+{"success":true,"data":{"files":[
+ {"isdir":false,"name":"b.mkv","path":"/video/b.mkv","additional":{"size":1073741824,"time":{"mtime":1790000000,"atime":1},"real_path":"/volume1/video/b.mkv"}},
+ {"isdir":true,"name":"Movies","path":"/video/Movies","additional":{"size":0,"time":{"mtime":1790000100}}},
+ {"isdir":false,"name":"A.txt","path":"/video/A.txt","additional":{"size":"12","time":{"mtime":"1790000200"}}}
+],"offset":0,"total":3}}

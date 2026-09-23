@@ -1,13 +1,30 @@
 package io.github.duskedge.synopilot.network
 
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.onUpload
 import io.ktor.client.plugins.timeout
+import io.ktor.client.request.forms.ChannelProvider
+import io.ktor.client.request.forms.formData
 import io.ktor.client.request.forms.submitForm
+import io.ktor.client.request.forms.submitFormWithBinaryData
 import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.parameter
+import io.ktor.client.request.prepareGet
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.Headers
+import io.ktor.http.HttpHeaders
+import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.http.parameters
+import io.ktor.utils.io.jvm.javaio.toByteReadChannel
+import io.ktor.utils.io.readAvailable
+import kotlinx.coroutines.ensureActive
+import java.io.InputStream
+import java.io.OutputStream
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -116,6 +133,90 @@ class DsmApi(
         // 流式接口出错时仍会返回标准的错误信封
         if (body.trimStart().startsWith("{")) runCatching { parseEnvelope(body, api) }.onFailure { if (it is DsmException) throw it }
         return body
+    }
+
+    /**
+     * 下载文件类接口（如 SYNO.FileStation.Download / Thumb）：把响应体写进 [sink]，返回写入的字节数。
+     * DSM 出错时返回 JSON 错误信封，会转成 [DsmException]。[maxBytes] 用来限制预览时读取的大小。
+     */
+    suspend fun download(
+        api: String,
+        method: String,
+        version: Int,
+        params: Map<String, String>,
+        session: DsmSession,
+        sink: OutputStream,
+        maxBytes: Long? = null,
+        onProgress: (done: Long, total: Long?) -> Unit = { _, _ -> },
+    ): Long {
+        val entry = apiInfo()[api] ?: throw DsmException(102, api)
+        return http.prepareGet("$baseUrl/webapi/${entry.path}") {
+            parameter("api", api)
+            parameter("version", minOf(version, entry.maxVersion))
+            parameter("method", method)
+            params.forEach { (k, v) -> parameter(k, v) }
+            parameter("_sid", session.sid)
+            session.synoToken?.let { header("X-SYNO-TOKEN", it) }
+            timeout { requestTimeoutMillis = Long.MAX_VALUE }
+        }.execute { response ->
+            if (!response.status.isSuccess()) throw DsmException(0, api, "下载失败（HTTP ${response.status.value}）")
+            if (response.contentType()?.match(ContentType.Application.Json) == true) {
+                parseEnvelope(response.bodyAsText(), api)
+                throw DsmException(0, api, "下载失败")
+            }
+            val total = response.headers[HttpHeaders.ContentLength]?.toLongOrNull()
+            val channel = response.bodyAsChannel()
+            val buffer = ByteArray(64 * 1024)
+            var done = 0L
+            while (true) {
+                coroutineContext.ensureActive()
+                val limit = maxBytes?.let { (it - done).coerceAtMost(buffer.size.toLong()).toInt() } ?: buffer.size
+                if (limit <= 0) break
+                val n = channel.readAvailable(buffer, 0, limit)
+                if (n < 0) break
+                sink.write(buffer, 0, n)
+                done += n
+                onProgress(done, total)
+            }
+            done
+        }
+    }
+
+    /** SYNO.FileStation.Upload：multipart 上传一个文件到 [folder]。 */
+    suspend fun upload(
+        folder: String,
+        fileName: String,
+        size: Long?,
+        session: DsmSession,
+        overwrite: Boolean,
+        open: () -> InputStream,
+        onProgress: (sent: Long, total: Long?) -> Unit = { _, _ -> },
+    ) {
+        val api = "SYNO.FileStation.Upload"
+        val entry = apiInfo()[api] ?: throw DsmException(102, api)
+        val response = http.submitFormWithBinaryData(
+            url = "$baseUrl/webapi/${entry.path}?api=$api&version=${minOf(2, entry.maxVersion)}&method=upload&_sid=${session.sid}",
+            formData = formData {
+                append("path", folder)
+                append("create_parents", "true")
+                append("overwrite", overwrite.toString())
+                append(
+                    "file",
+                    ChannelProvider(size) { open().toByteReadChannel() },
+                    Headers.build {
+                        // Ktor 会自动加上 form-data; name="file"，这里只补文件名
+                        append(HttpHeaders.ContentDisposition, "filename=\"${fileName.replace("\"", "")}\"")
+                        append(HttpHeaders.ContentType, "application/octet-stream")
+                    },
+                )
+            },
+        ) {
+            session.synoToken?.let { header("X-SYNO-TOKEN", it) }
+            timeout { requestTimeoutMillis = Long.MAX_VALUE }
+            onUpload { sent, total -> onProgress(sent, total) }
+        }
+        if (!response.status.isSuccess()) throw DsmException(0, api, "上传失败（HTTP ${response.status.value}）")
+        parseEnvelope(response.bodyAsText(), api)
     }
 
     companion object {

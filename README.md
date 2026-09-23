@@ -53,12 +53,19 @@ git push origin v0.2.0
 ## 工程结构
 
 ```
-app/                 应用入口、导航、各页面
+app/                 应用入口、导航、指纹锁
 core/designsystem/   颜色、字体和基础组件（沿用群晖 DSM 配色）
+core/network/        DSM WebAPI、证书固定、Container Manager、下载器适配（DS / qBittorrent / Transmission）
+core/data/           设备与凭证存储、连接管理（主备地址 + QuickConnect）、各页面的数据仓库
+core/security/       Android Keystore 加密
 core/updater/        自动更新：检查、下载、校验、安装
+feature/*            接入、总览、容器、下载、设置等页面
 build-logic/         Gradle 约定插件：SDK 版本、版本号、签名
-scripts/             发布脚本
+scripts/             发布脚本；dev/mock-dsm.py 是开发用的假 DSM
 ```
+
+没有群晖也可以调试：`python3 scripts/dev/mock-dsm.py --port 5050`，模拟器里用 `http://10.0.2.2:5050` 添加设备（账号 `admin` / `admin`）。
+它还模拟了 Container Manager、Download Station、qBittorrent（`admin` / `adminadmin`）和 Transmission。
 
 ## 第三方资源
 

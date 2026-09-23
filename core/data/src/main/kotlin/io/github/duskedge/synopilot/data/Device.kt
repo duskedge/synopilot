@@ -1,5 +1,6 @@
 package io.github.duskedge.synopilot.data
 
+import io.github.duskedge.synopilot.network.download.EngineKind
 import kotlinx.serialization.Serializable
 
 /** 两个地址都能连上时优先用哪个 */
@@ -35,7 +36,14 @@ data class Device(
     val pinnedCerts: List<String> = emptyList(),
     val addressHistory: List<AddressRecord> = emptyList(),
     val addedAt: Long = 0,
+    val downloaders: List<DownloaderConfig> = emptyList(),
+    /** 添加任务时默认使用的下载器 */
+    val defaultDownloaderId: String = "",
 ) {
+    /** 这台 NAS 在局域网里的主机名/IP（来自主地址或备用地址），用于拼容器端口地址 */
+    val lanHost: String? get() = listOf(primaryUrl, backupUrl)
+        .firstOrNull { it.isNotBlank() && Addresses.kindOf(it) == AddressKind.Lan }?.let(Addresses::host)
+
     val quickConnectUrl: String? get() = quickConnectId.takeIf { it.isNotBlank() }?.let { "https://$it.quickconnect.to" }
 
     fun withAddressUsed(url: String, now: Long): Device {
@@ -56,6 +64,27 @@ data class DeviceSecrets(
     val synoToken: String? = null,
     /** 「信任这台设备」后 DSM 返回的令牌，带上后登录不再需要两步验证码 */
     val deviceToken: String? = null,
+    /** 下载器 id → 密码 */
+    val downloaderPasswords: Map<String, String> = emptyMap(),
+)
+
+/**
+ * 一个下载器。qBittorrent / Transmission 跑在 NAS 的容器里，只能通过端口访问：
+ * 局域网用 [lanUrl]；Tailscale 下把 [lanUrl] 的主机换成 Tailscale 地址；
+ * 外网（域名 / QuickConnect）用 [remoteUrl]，没填就是「外网不可用」。
+ * Download Station 走 DSM 会话，不需要地址。
+ */
+@Serializable
+data class DownloaderConfig(
+    val id: String,
+    val kind: EngineKind,
+    val name: String,
+    val lanUrl: String = "",
+    val remoteUrl: String = "",
+    val username: String = "",
+    /** 自动发现时对应的容器名 */
+    val containerName: String = "",
+    val enabled: Boolean = true,
 )
 
 @Serializable

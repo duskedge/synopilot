@@ -1,0 +1,4 @@
+{"success":true,"data":{
+ "b1c2":{"id":"b1c2","name":"media","path":"/docker/media","status":"RUNNING","containers":[{"Name":"/jellyfin"},{"Name":"/qbittorrent"}]},
+ "a0f9":{"id":"a0f9","name":"arr","share_path":"/docker/arr","status":"STOPPED","containers":[]}
+}}

@@ -1,0 +1,4 @@
+{"success":true,"data":{"resources":[
+ {"name":"jellyfin","cpu":"12.5","memory":524288000,"memoryPercent":3.1},
+ {"name":"qbittorrent","cpu":2.0,"memory":104857600,"memoryPercent":0.6}
+]}}

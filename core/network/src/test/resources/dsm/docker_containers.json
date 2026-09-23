@@ -1,0 +1,8 @@
+{"success":true,"data":{"containers":[
+ {"name":"jellyfin","image":"jellyfin/jellyfin:10.10","status":"running","up_status":"Up 14 days","exit_code":0,"memory_limit":0,
+  "ports":[{"host_port":8096,"container_port":8096,"type":"tcp"}]},
+ {"name":"qbittorrent","image":"linuxserver/qbittorrent:latest","status":"running","up_status":"Up 3 days","memory_limit":2147483648,
+  "ports":[{"host_port":8080,"container_port":8080,"type":"tcp"},{"host_port":6881,"container_port":6881,"type":"udp"}]},
+ {"name":"old-backup","image":"alpine:3","status":"exited","up_status":"Exited (0) 2 days ago","exit_code":0,"ports":[]},
+ {"name":"crashy","image":"crashy:dev","status":"exited","up_status":"Exited (137) 1 hour ago","State":{"ExitCode":137,"Status":"exited"},"ports":[]}
+],"total":4}}

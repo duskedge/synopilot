@@ -85,6 +85,39 @@ class DsmApi(
         return parseEnvelope(response.bodyAsText(), api)
     }
 
+    /**
+     * 调用返回「流」的方法（如 Compose 项目的 start_stream / build_stream），
+     * 只关心是否成功，返回原始文本。
+     */
+    suspend fun callStream(
+        api: String,
+        method: String,
+        version: Int,
+        params: Map<String, String> = emptyMap(),
+        session: DsmSession? = null,
+        timeoutMillis: Long = 10 * 60_000,
+    ): String {
+        val entry = apiInfo()[api] ?: throw DsmException(102, api)
+        val response = http.submitForm(
+            url = "$baseUrl/webapi/${entry.path}",
+            formParameters = parameters {
+                append("api", api)
+                append("version", minOf(version, entry.maxVersion).toString())
+                append("method", method)
+                params.forEach { (k, value) -> append(k, value) }
+                if (session != null) append("_sid", session.sid)
+            },
+        ) {
+            session?.synoToken?.let { header("X-SYNO-TOKEN", it) }
+            timeout { requestTimeoutMillis = timeoutMillis }
+        }
+        if (!response.status.isSuccess()) throw DsmException(0, api, "请求失败（HTTP ${response.status.value}）")
+        val body = response.bodyAsText()
+        // 流式接口出错时仍会返回标准的错误信封
+        if (body.trimStart().startsWith("{")) runCatching { parseEnvelope(body, api) }.onFailure { if (it is DsmException) throw it }
+        return body
+    }
+
     companion object {
         internal val json = Json { ignoreUnknownKeys = true; isLenient = true }
 

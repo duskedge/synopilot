@@ -22,5 +22,7 @@ fun dataModule(userAgent: String) = module {
     single(DSM_HTTP) { DsmHttp.create(get<DeviceRepository>().trustedPins, userAgent) }
     single { ConnectionManager(get(), get(DSM_HTTP), get(APP_SCOPE)).also { it.start() } }
     single { DashboardRepository(get(), get(), File(androidContext().cacheDir, "dashboard")) }
+    single { ContainersRepository(get()) }
+    single { DownloadsRepository(get(), get(), get(DSM_HTTP)) }
     single { LanDiscovery(androidContext(), get(DSM_HTTP)) }
 }

@@ -16,6 +16,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Fingerprint
@@ -89,6 +90,7 @@ fun connectionSummary(state: ConnectionState): String = when (state) {
 fun SettingsScreen(
     onOpenServerAddress: () -> Unit,
     onAddDevice: () -> Unit,
+    onOpenDownloaders: () -> Unit,
     viewModel: SettingsViewModel = koinViewModel(),
     updateManager: UpdateManager = koinInject(),
 ) {
@@ -114,6 +116,15 @@ fun SettingsScreen(
                     icon = route?.kind?.icon() ?: if (state is ConnectionState.Failed) Icons.Outlined.CloudOff else Icons.Outlined.Public,
                     subtitle = connectionSummary(state),
                     onClick = onOpenServerAddress,
+                    trailing = { Chevron() },
+                )
+                val downloaders = current.downloaders
+                SpListItem(
+                    title = "下载器",
+                    icon = Icons.Outlined.CloudDownload,
+                    subtitle = if (downloaders.isEmpty()) "还没有添加" else downloaders.joinToString(" · ") { it.name },
+                    divider = true,
+                    onClick = onOpenDownloaders,
                     trailing = { Chevron() },
                 )
             }

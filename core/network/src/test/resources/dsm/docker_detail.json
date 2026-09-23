@@ -1,0 +1,6 @@
+{"success":true,"data":{
+ "profile":{"env_variables":[{"key":"TZ","value":"Asia/Shanghai"},{"key":"PUID","value":"1026"}],
+  "volume_bindings":[{"host_volume_file":"/docker/jellyfin/config","mount_point":"/config","type":"rw"},{"host_volume_file":"/video","mount_point":"/media","type":"ro"}],
+  "port_bindings":[{"host_port":8096,"container_port":8096,"type":"tcp"}],"enable_restart_policy":true},
+ "details":{"HostConfig":{"RestartPolicy":{"Name":"unless-stopped"}},"NetworkSettings":{"Networks":{"bridge":{"IPAddress":"172.17.0.2"}}}}
+}}

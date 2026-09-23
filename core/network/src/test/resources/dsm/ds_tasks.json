@@ -1,0 +1,7 @@
+{"success":true,"data":{"offset":0,"total":2,"tasks":[
+ {"id":"dbid_101","title":"ubuntu-26.04.iso","size":6000000000,"status":"downloading","type":"bt",
+  "additional":{"detail":{"destination":"downloads/iso","connected_seeders":12,"connected_leechers":3},
+   "transfer":{"size_downloaded":3000000000,"size_uploaded":100,"speed_download":10000000,"speed_upload":2000}}},
+ {"id":"dbid_102","title":"broken.zip","size":100,"status":"error","status_extra":{"error_detail":"broken_link"},
+  "additional":{"transfer":{"size_downloaded":0}}}
+]}}

@@ -3,6 +3,7 @@ package io.github.duskedge.synopilot.data
 import io.github.duskedge.synopilot.network.Health
 import io.github.duskedge.synopilot.network.StorageInfo
 import io.github.duskedge.synopilot.network.Volume
+import io.github.duskedge.synopilot.network.download.EngineKind
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -16,7 +17,8 @@ class SerializationTest {
 
     @Test
     fun `设备列表往返`() {
-        val d = Device(id = "1", name = "DS923+", account = "admin", primaryUrl = "https://nas.example.com", pinnedCerts = listOf("ab"))
+        val d = Device(id = "1", name = "DS923+", account = "admin", primaryUrl = "https://nas.example.com", pinnedCerts = listOf("ab"),
+            downloaders = listOf(DownloaderConfig("q", EngineKind.QBittorrent, "qB", lanUrl = "http://192.168.1.2:8080")), defaultDownloaderId = "q")
             .withAddressUsed("https://nas.example.com", 5)
         val list = listOf(d)
         assertEquals(list, json.decodeFromString<List<Device>>(json.encodeToString(list)))
@@ -24,7 +26,7 @@ class SerializationTest {
 
     @Test
     fun `凭证和设置往返`() {
-        val s = DeviceSecrets("pw", "sid", "tok", "did")
+        val s = DeviceSecrets("pw", "sid", "tok", "did", mapOf("q" to "qbpw"))
         assertEquals(s, json.decodeFromString<DeviceSecrets>(json.encodeToString(s)))
         val a = AppSettings(biometricLock = true, pollSeconds = 10)
         assertEquals(a, json.decodeFromString<AppSettings>(json.encodeToString(a)))

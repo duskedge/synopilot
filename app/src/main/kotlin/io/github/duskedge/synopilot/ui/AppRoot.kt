@@ -62,7 +62,10 @@ import io.github.duskedge.synopilot.data.DeviceRepository
 import io.github.duskedge.synopilot.designsystem.SpTheme
 import io.github.duskedge.synopilot.designsystem.component.SpBottomBar
 import io.github.duskedge.synopilot.designsystem.component.SpNavItem
+import io.github.duskedge.synopilot.feature.containers.ContainersScreen
 import io.github.duskedge.synopilot.feature.dashboard.DashboardScreen
+import io.github.duskedge.synopilot.feature.downloads.DownloadersScreen
+import io.github.duskedge.synopilot.feature.downloads.DownloadsScreen
 import io.github.duskedge.synopilot.feature.onboarding.OnboardingScreen
 import io.github.duskedge.synopilot.feature.settings.DeviceSwitcherSheet
 import io.github.duskedge.synopilot.feature.settings.ServerAddressScreen
@@ -80,6 +83,7 @@ import kotlin.reflect.KClass
 @Serializable data object FilesRoute
 @Serializable data object SettingsRoute
 @Serializable data object ServerAddressRoute
+@Serializable data object DownloadersRoute
 @Serializable data object AddDeviceRoute
 @Serializable data class ReloginRoute(val deviceId: String)
 
@@ -123,6 +127,7 @@ private fun MainScaffold(updateManager: UpdateManager) {
     val fullScreen = destination?.hasRoute(AddDeviceRoute::class) == true || destination?.hasRoute(ReloginRoute::class) == true
     val subPageTitle = when {
         destination?.hasRoute(ServerAddressRoute::class) == true -> "服务端地址"
+        destination?.hasRoute(DownloadersRoute::class) == true -> "下载器"
         else -> null
     }
 
@@ -142,16 +147,18 @@ private fun MainScaffold(updateManager: UpdateManager) {
                         onOpenServerAddress = { nav.navigate(ServerAddressRoute) },
                     )
                 }
-                composable<ContainersRoute> { ContainersPlaceholder() }
-                composable<DownloadsRoute> { DownloadsPlaceholder() }
+                composable<ContainersRoute> { ContainersScreen() }
+                composable<DownloadsRoute> { DownloadsScreen(onOpenDownloaders = { nav.navigate(DownloadersRoute) }) }
                 composable<FilesRoute> { FilesPlaceholder() }
                 composable<SettingsRoute> {
                     SettingsScreen(
                         onOpenServerAddress = { nav.navigate(ServerAddressRoute) },
                         onAddDevice = { nav.navigate(AddDeviceRoute) },
+                        onOpenDownloaders = { nav.navigate(DownloadersRoute) },
                     )
                 }
                 composable<ServerAddressRoute> { ServerAddressScreen() }
+                composable<DownloadersRoute> { DownloadersScreen() }
                 composable<AddDeviceRoute> {
                     OnboardingScreen(onFinished = { nav.backToTabs() }, onCancel = { nav.popBackStack() })
                 }

@@ -2,7 +2,9 @@ package io.github.duskedge.synopilot
 
 import android.app.Application
 import io.github.duskedge.synopilot.data.dataModule
+import io.github.duskedge.synopilot.feature.containers.containersModule
 import io.github.duskedge.synopilot.feature.dashboard.dashboardModule
+import io.github.duskedge.synopilot.feature.downloads.downloadsModule
 import io.github.duskedge.synopilot.feature.onboarding.onboardingModule
 import io.github.duskedge.synopilot.feature.settings.settingsModule
 import io.github.duskedge.synopilot.updater.UpdateCheckWorker
@@ -32,6 +34,8 @@ class SynoPilotApplication : Application() {
                 dataModule(userAgent = "SynoPilot/${BuildConfig.VERSION_NAME}"),
                 onboardingModule,
                 dashboardModule,
+                containersModule,
+                downloadsModule,
                 settingsModule,
             )
         }

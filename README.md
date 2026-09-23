@@ -1,0 +1,65 @@
+# SynoPilot 群晖领航员
+
+在手机上管理群晖 NAS 的 Android 应用：设备状态、Docker 容器、下载（Download Station / qBittorrent / Transmission）、文件和电源，集中在一个 App 里。
+
+> 目前处于早期开发阶段（M0：工程基础与自动更新）。各页面会按里程碑逐步完成。
+
+## 下载安装
+
+1. 到 [Releases](https://github.com/duskedge/synopilot/releases) 下载最新的 `SynoPilot-x.y.z.apk`；
+2. 安装时如果提示「禁止安装未知应用」，在系统设置里允许浏览器（或文件管理器）安装应用；
+3. 之后的新版本会在 App 内提示，下载后自动校验，再交给系统安装。
+
+**自动更新说明**
+
+- App 每天检查一次 GitHub Releases，也可以在「设置 → 检查更新」手动检查；
+- 安装前会校验文件大小、SHA-256 和签名证书，任何一项不对都会拒绝安装；
+- 想提前体验测试版，打开「设置 → 接收测试版」；
+- GitHub 下载慢时，可以在「设置 → 更新下载地址」填写镜像地址前缀。
+
+最低支持 Android 8.0。
+
+## 从源码构建
+
+需要 JDK 17 和 Android SDK（compileSdk 37）。
+
+```bash
+./gradlew assembleGithubDebug        # 调试版，输出在 app/build/outputs/apk/github/debug/
+./gradlew testDebugUnitTest testGithubDebugUnitTest :build-logic:convention:test
+```
+
+- 本机的 `JAVA_HOME` 不是 17 也没关系：`gradle/gradle-daemon-jvm.properties` 要求用 JDK 17 运行构建，Gradle 会自动使用已安装的 JDK 17；
+- 在国内访问 Google Maven 困难时，可以在项目根目录的 `local.properties`（不会提交）里加一行 `mirror=aliyun`，改用阿里云镜像。
+
+## 发布
+
+推送 `v` 开头的标签即可自动打包并发布到 Releases：
+
+```bash
+git tag -a v0.2.0 -m "- 更新说明第一条
+- 更新说明第二条"
+git push origin v0.2.0
+```
+
+| 标签 | 发布为 |
+| :--- | :--- |
+| `v1.2.0` | 正式版 |
+| `v1.3.0-beta.1`、`v1.3.0-rc.1` | 预发布，只推送给打开了「接收测试版」的用户 |
+
+- 附注标签（`-a -m`）的说明会作为更新说明显示在 App 里；
+- 需要强制更新时，修改 `.github/update-policy.properties` 里的 `minSupportedVersionCode`；
+- 签名密钥保存在仓库的 Actions Secrets 中（`SIGNING_KEYSTORE_BASE64`、`SIGNING_STORE_PASSWORD`、`SIGNING_KEY_ALIAS`、`SIGNING_KEY_PASSWORD`）。
+
+## 工程结构
+
+```
+app/                 应用入口、导航、各页面
+core/designsystem/   颜色、字体和基础组件（沿用群晖 DSM 配色）
+core/updater/        自动更新：检查、下载、校验、安装
+build-logic/         Gradle 约定插件：SDK 版本、版本号、签名
+scripts/             发布脚本
+```
+
+## 第三方资源
+
+- 数字字体 [Archivo](https://github.com/Omnibus-Type/Archivo)，SIL Open Font License 1.1（见 `core/designsystem/licenses/`）。

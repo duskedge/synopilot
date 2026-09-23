@@ -65,3 +65,12 @@ doc/
 *.keystore
 keystore.properties
 signing.properties
+
+# Android / Gradle
+local.properties
+.gradle/
+.kotlin/
+*.iml
+captures/
+.cxx/
+.externalNativeBuild/

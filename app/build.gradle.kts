@@ -32,6 +32,11 @@ android {
 dependencies {
     implementation(project(":core:designsystem"))
     implementation(project(":core:updater"))
+    implementation(project(":core:data"))
+    implementation(project(":feature:onboarding"))
+    implementation(project(":feature:dashboard"))
+    implementation(project(":feature:settings"))
+    implementation(libs.androidx.biometric)
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

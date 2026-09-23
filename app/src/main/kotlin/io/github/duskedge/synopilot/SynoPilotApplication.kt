@@ -1,6 +1,10 @@
 package io.github.duskedge.synopilot
 
 import android.app.Application
+import io.github.duskedge.synopilot.data.dataModule
+import io.github.duskedge.synopilot.feature.dashboard.dashboardModule
+import io.github.duskedge.synopilot.feature.onboarding.onboardingModule
+import io.github.duskedge.synopilot.feature.settings.settingsModule
 import io.github.duskedge.synopilot.updater.UpdateCheckWorker
 import io.github.duskedge.synopilot.updater.UpdateNotifier
 import io.github.duskedge.synopilot.updater.UpdaterConfig
@@ -23,7 +27,13 @@ class SynoPilotApplication : Application() {
         )
         startKoin {
             androidContext(this@SynoPilotApplication)
-            modules(updaterModule(updaterConfig))
+            modules(
+                updaterModule(updaterConfig),
+                dataModule(userAgent = "SynoPilot/${BuildConfig.VERSION_NAME}"),
+                onboardingModule,
+                dashboardModule,
+                settingsModule,
+            )
         }
         get<UpdateNotifier>().createChannel()
         if (updaterConfig.enabled) UpdateCheckWorker.schedule(this)

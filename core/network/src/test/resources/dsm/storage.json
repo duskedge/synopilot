@@ -1,0 +1,7 @@
+{"data":{"disks":[
+ {"id":"sata1","name":"Drive 1","longName":"Drive 1","model":"ST8000NT001-3LZ101  ","vendor":"Seagate ","serial":"ZA1K7Q2B","temp":35,"status":"normal","overview_status":"normal","smart_status":"normal","size_total":"8001563222016","isSsd":false,"diskType":"SATA"},
+ {"id":"sata3","name":"Drive 3","longName":"Drive 3","model":"WD80EFPX-68C4ZN0","vendor":"WDC","serial":"VGH3M1QK","temp":41,"status":"normal","overview_status":"warning","smart_status":"normal","size_total":8001563222016,"isSsd":false,"diskType":"SATA"},
+ {"id":"nvme0n1","name":"Cache device 1","model":"Samsung SSD 990 EVO 1TB","vendor":"Samsung","serial":"S7M3NS0W","temp":46,"status":"normal","smart_status":"normal","size_total":"1000204886016","isSsd":true,"diskType":"M.2 NVMe"}
+],
+"storagePools":[{"id":"reuse_1","num_id":1,"status":"normal","device_type":"shr_with_1_disk_protect","size":{"total":"23440890000000","used":"14280540000000"}}],
+"volumes":[{"id":"volume_1","num_id":1,"status":"normal","fs_type":"btrfs","vol_path":"/volume1","size":{"total":"23000000000000","used":"14300000000000"}}]},"success":true}

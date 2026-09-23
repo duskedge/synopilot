@@ -25,6 +25,10 @@ gradlePlugin {
             id = "synopilot.android.library"
             implementationClass = "AndroidLibraryConventionPlugin"
         }
+        register("androidFeature") {
+            id = "synopilot.android.feature"
+            implementationClass = "AndroidFeatureConventionPlugin"
+        }
         register("androidLibraryCompose") {
             id = "synopilot.android.library.compose"
             implementationClass = "AndroidLibraryComposeConventionPlugin"

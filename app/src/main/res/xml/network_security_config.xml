@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  DSM 局域网默认用 HTTP 5000 端口，用户也可能填 http:// 的内网地址，所以允许明文 HTTP。
+  HTTPS 的证书校验由 App 自己做（系统信任 + 用户确认后固定指纹），见 core/network 的 Tls.kt。
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config
+        cleartextTrafficPermitted="true"
+        tools:ignore="InsecureBaseConfiguration">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

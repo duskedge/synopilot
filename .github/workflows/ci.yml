@@ -30,7 +30,7 @@ jobs:
         run: ./gradlew :build-logic:convention:test testDebugUnitTest testGithubDebugUnitTest
 
       - name: Lint
-        run: ./gradlew lintGithubDebug :core:updater:lintDebug :core:designsystem:lintDebug
+        run: ./gradlew lintGithubDebug lintDebug
 
       - name: 打包 debug
         run: ./gradlew assembleGithubDebug

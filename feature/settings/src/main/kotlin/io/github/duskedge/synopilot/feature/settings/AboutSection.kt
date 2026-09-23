@@ -1,4 +1,4 @@
-package io.github.duskedge.synopilot.ui.settings
+package io.github.duskedge.synopilot.feature.settings
 
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
@@ -20,7 +20,6 @@ import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -36,7 +35,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.duskedge.synopilot.BuildConfig
 import io.github.duskedge.synopilot.designsystem.SpTheme
 import io.github.duskedge.synopilot.designsystem.component.SpButton
 import io.github.duskedge.synopilot.designsystem.component.SpButtonSize
@@ -47,110 +45,101 @@ import io.github.duskedge.synopilot.designsystem.component.SpSectionHeader
 import io.github.duskedge.synopilot.designsystem.component.SpStatus
 import io.github.duskedge.synopilot.designsystem.component.SpSwitch
 import io.github.duskedge.synopilot.designsystem.component.SpTag
-import io.github.duskedge.synopilot.ui.ScreenColumn
+import io.github.duskedge.synopilot.designsystem.component.SpTextField
 import io.github.duskedge.synopilot.updater.MirrorUrl
 import io.github.duskedge.synopilot.updater.UpdateManager
 import io.github.duskedge.synopilot.updater.UpdateSettings
 import io.github.duskedge.synopilot.updater.UpdateState
 import kotlinx.coroutines.launch
-import org.koin.compose.koinInject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** 设置页「关于」：版本、检查更新、测试版通道、更新下载地址、安装权限、源代码。 */
 @Composable
-fun SettingsScreen(updateManager: UpdateManager = koinInject()) {
+internal fun AboutSection(updateManager: UpdateManager) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val config = updateManager.config
     val state by updateManager.state.collectAsStateWithLifecycle()
     val settings by updateManager.settings.collectAsStateWithLifecycle(initialValue = UpdateSettings())
     var needsInstallPermission by remember { mutableStateOf(false) }
     var editingMirror by rememberSaveable { mutableStateOf(false) }
 
-    // 从系统设置返回后重新判断安装权限
     LifecycleResumeEffect(Unit) {
-        needsInstallPermission = BuildConfig.UPDATE_INSTALL_ALLOWED && updateManager.needsInstallPermission()
+        needsInstallPermission = config.installAllowed && updateManager.needsInstallPermission()
         onPauseOrDispose { }
     }
 
-    ScreenColumn {
-        SpSectionHeader("关于")
-        SpListGroup {
+    SpSectionHeader("关于")
+    SpListGroup {
+        SpListItem(
+            title = "版本",
+            icon = Icons.Outlined.Info,
+            subtitle = "${config.currentVersionName}（${config.currentVersionCode}）",
+            trailing = { if (settings.betaChannel) SpTag("测试版通道") },
+        )
+        SpListItem(
+            title = "检查更新",
+            icon = Icons.Outlined.SystemUpdate,
+            subtitle = updateSubtitle(state, settings),
+            divider = true,
+            onClick = {
+                when (state) {
+                    is UpdateState.Available, is UpdateState.Downloading, is UpdateState.ReadyToInstall -> updateManager.showDialog()
+                    else -> updateManager.checkNow()
+                }
+            },
+            trailing = {
+                when (state) {
+                    UpdateState.Checking -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = SpTheme.colors.primary)
+                    is UpdateState.Available, is UpdateState.ReadyToInstall -> SpTag("新版本", status = SpStatus.Error)
+                    else -> Unit
+                }
+            },
+        )
+        SpListItem(
+            title = "接收测试版",
+            icon = Icons.Outlined.Science,
+            subtitle = "提前体验 beta / rc 版本，可能不稳定",
+            divider = true,
+            trailing = { SpSwitch(checked = settings.betaChannel, onCheckedChange = { on -> scope.launch { updateManager.setBetaChannel(on) } }) },
+        )
+        SpListItem(
+            title = "更新下载地址",
+            icon = Icons.Outlined.Public,
+            subtitle = settings.mirrorPrefix.ifBlank { "默认（直接从 GitHub 下载）" },
+            divider = true,
+            onClick = { editingMirror = true },
+        )
+        if (needsInstallPermission) {
             SpListItem(
-                title = "版本",
-                icon = Icons.Outlined.Info,
-                subtitle = "${BuildConfig.VERSION_NAME}（${BuildConfig.VERSION_CODE}）",
-                trailing = { if (settings.betaChannel) SpTag("测试版通道") },
-            )
-            SpListItem(
-                title = "检查更新",
-                icon = Icons.Outlined.SystemUpdate,
-                subtitle = updateSubtitle(state, settings),
+                title = "允许安装更新",
+                icon = Icons.Outlined.GetApp,
+                subtitle = "需要在系统设置里允许 SynoPilot 安装应用",
+                titleColor = SpTheme.colors.warning,
                 divider = true,
-                onClick = {
-                    when (state) {
-                        is UpdateState.Available, is UpdateState.Downloading, is UpdateState.ReadyToInstall -> updateManager.showDialog()
-                        else -> updateManager.checkNow()
-                    }
-                },
-                trailing = {
-                    when (state) {
-                        UpdateState.Checking -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = SpTheme.colors.primary)
-                        is UpdateState.Available, is UpdateState.ReadyToInstall -> SpTag("新版本", status = SpStatus.Error)
-                        else -> Unit
-                    }
-                },
-            )
-            SpListItem(
-                title = "接收测试版",
-                icon = Icons.Outlined.Science,
-                subtitle = "提前体验 beta / rc 版本，可能不稳定",
-                divider = true,
-                trailing = {
-                    SpSwitch(checked = settings.betaChannel, onCheckedChange = { on ->
-                        scope.launch { updateManager.setBetaChannel(on) }
-                    })
-                },
-            )
-            SpListItem(
-                title = "更新下载地址",
-                icon = Icons.Outlined.Public,
-                subtitle = settings.mirrorPrefix.ifBlank { "默认（直接从 GitHub 下载）" },
-                divider = true,
-                onClick = { editingMirror = true },
-            )
-            if (needsInstallPermission) {
-                SpListItem(
-                    title = "允许安装更新",
-                    icon = Icons.Outlined.GetApp,
-                    subtitle = "需要在系统设置里允许 SynoPilot 安装应用",
-                    titleColor = SpTheme.colors.warning,
-                    divider = true,
-                    onClick = { context.startActivity(updateManager.installPermissionIntent()) },
-                )
-            }
-            SpListItem(
-                title = "源代码",
-                icon = Icons.Outlined.Code,
-                subtitle = "github.com/${BuildConfig.UPDATE_REPO}",
-                divider = true,
-                onClick = {
-                    context.startActivity(
-                        Intent(Intent.ACTION_VIEW, "https://github.com/${BuildConfig.UPDATE_REPO}".toUri())
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                    )
-                },
-                trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = SpTheme.colors.onSurfaceVariant, modifier = Modifier.size(18.dp)) },
+                onClick = { context.startActivity(updateManager.installPermissionIntent()) },
             )
         }
-        if (!BuildConfig.UPDATE_INSTALL_ALLOWED) {
-            Text(
-                "这是调试版：可以检查更新，但不能直接安装正式版（包名和签名不同）。",
-                style = SpTheme.type.caption,
-                color = SpTheme.colors.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp),
-            )
-        }
+        SpListItem(
+            title = "源代码",
+            icon = Icons.Outlined.Code,
+            subtitle = "github.com/${config.repo}",
+            divider = true,
+            onClick = {
+                context.startActivity(Intent(Intent.ACTION_VIEW, "https://github.com/${config.repo}".toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            },
+            trailing = { Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = SpTheme.colors.onSurfaceVariant, modifier = Modifier.size(18.dp)) },
+        )
+    }
+    if (!config.installAllowed) {
+        Text(
+            "这是调试版：可以检查更新，但不能直接安装正式版（包名和签名不同）。",
+            style = SpTheme.type.caption,
+            color = SpTheme.colors.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+        )
     }
 
     if (editingMirror) {
@@ -166,11 +155,7 @@ fun SettingsScreen(updateManager: UpdateManager = koinInject()) {
 }
 
 private fun updateSubtitle(state: UpdateState, settings: UpdateSettings): String {
-    val last = if (settings.lastCheckAt > 0) {
-        SimpleDateFormat("M月d日 HH:mm", Locale.CHINA).format(Date(settings.lastCheckAt))
-    } else {
-        null
-    }
+    val last = settings.lastCheckAt.takeIf { it > 0 }?.let { SimpleDateFormat("M月d日 HH:mm", Locale.CHINA).format(Date(it)) }
     return when (state) {
         UpdateState.Idle -> last?.let { "上次检查：$it" } ?: "点按检查新版本"
         UpdateState.Checking -> "正在检查…"
@@ -200,15 +185,14 @@ private fun MirrorDialog(initial: String, onDismiss: () -> Unit, onSave: (String
                     style = SpTheme.type.bodySmall,
                     color = SpTheme.colors.onSurfaceVariant,
                 )
-                OutlinedTextField(
+                SpTextField(
                     value = value,
                     onValueChange = { value = it },
-                    singleLine = true,
+                    label = "镜像地址前缀",
+                    placeholder = "https://",
                     isError = !valid,
-                    placeholder = { Text("https://") },
-                    supportingText = { if (!valid) Text("需要以 https:// 开头") },
+                    supportingText = if (!valid) "需要以 https:// 开头" else null,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         },

@@ -59,6 +59,7 @@ class DownloadsRepository(
     private val connection: ConnectionManager,
     private val repository: DeviceRepository,
     private val http: HttpClient,
+    private val snapshot: SnapshotStore? = null,
 ) {
     private val refresh = Channel<Unit>(Channel.CONFLATED)
     private val clientsLock = Mutex()
@@ -83,7 +84,9 @@ class DownloadsRepository(
                 return@collectLatest
             }
             val enabled = device.downloaders.filter { it.enabled }
-            var data = DownloadsData(enabled.map { EngineStatus(it) }, device.defaultDownloaderId, loaded = enabled.isEmpty())
+            // 先显示上次的结果，避免每次切回页面都从空白开始
+            val cached = enabled.map { cfg -> lastGood[cfg.id]?.copy(config = cfg) ?: EngineStatus(cfg) }
+            var data = DownloadsData(cached, device.defaultDownloaderId, loaded = enabled.isEmpty() || cached.all { it.loaded })
             send(data)
             if (!connected || enabled.isEmpty()) {
                 if (!connected) {
@@ -102,10 +105,22 @@ class DownloadsRepository(
                 }
                 statuses.filter { it.problem == null }.forEach { lastGood[it.config.id] = it }
                 data = data.copy(engines = statuses, loaded = true)
+                snapshot?.update { it.withDownloads(data) }
                 send(data)
                 withTimeoutOrNull(pollMs) { refresh.receive() }
             }
         }
+    }
+
+    /** 拉一次所有启用的下载器（后台任务、下载通知用）；没有下载器或未连接时返回 null */
+    suspend fun pollOnce(): DownloadsData? {
+        val device = repository.currentDevice.first() ?: return null
+        val route = (connection.state.value as? ConnectionState.Connected)?.route ?: return null
+        val enabled = device.downloaders.filter { it.enabled }
+        if (enabled.isEmpty()) return null
+        val statuses = coroutineScope { enabled.map { cfg -> async { poll(device, cfg, route) } }.awaitAll() }
+        statuses.filter { it.problem == null }.forEach { lastGood[it.config.id] = it }
+        return DownloadsData(statuses, device.defaultDownloaderId, loaded = true)
     }
 
     private suspend fun poll(device: Device, cfg: DownloaderConfig, route: Route?): EngineStatus {

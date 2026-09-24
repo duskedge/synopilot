@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.CloudDownload
 import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.Dns
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Fingerprint
 import androidx.compose.material.icons.outlined.Lan
 import androidx.compose.material.icons.outlined.Public
@@ -169,6 +170,13 @@ fun SettingsScreen(
                 divider = true,
                 onClick = { pickingPoll = true },
                 trailing = { Chevron() },
+            )
+            SpListItem(
+                title = "下载进度通知",
+                icon = Icons.Outlined.Download,
+                subtitle = "有下载任务时在通知栏显示进度和「全部暂停」",
+                divider = true,
+                trailing = { SpSwitch(checked = settings.downloadNotification, onCheckedChange = viewModel::setDownloadNotification) },
             )
         }
 

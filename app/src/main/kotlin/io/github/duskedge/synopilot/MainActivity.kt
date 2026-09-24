@@ -14,7 +14,6 @@ import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
@@ -22,9 +21,17 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import io.github.duskedge.synopilot.data.DeviceRepository
 import io.github.duskedge.synopilot.designsystem.SynoPilotTheme
-import io.github.duskedge.synopilot.data.AlertNotifier
+import io.github.duskedge.synopilot.data.AppLinks
 import io.github.duskedge.synopilot.data.ConnectionManager
+import io.github.duskedge.synopilot.data.SnapshotStore
+import io.github.duskedge.synopilot.data.SnapshotUpdater
+import io.github.duskedge.synopilot.feature.widget.DownloadProgressService
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import io.github.duskedge.synopilot.ui.AppRoot
+import io.github.duskedge.synopilot.ui.OpenRequest
 import io.github.duskedge.synopilot.ui.LockScreen
 import io.github.duskedge.synopilot.updater.UpdateManager
 import io.github.duskedge.synopilot.updater.UpdateNotifier
@@ -38,13 +45,15 @@ class MainActivity : FragmentActivity() {
     private val updateManager: UpdateManager by inject()
     private val devices: DeviceRepository by inject()
     private val connection: ConnectionManager by inject()
+    private val snapshots: SnapshotStore by inject()
+    private val snapshotUpdater: SnapshotUpdater by inject()
 
     private var locked by mutableStateOf(false)
     private var lockChecked by mutableStateOf(false)
     private var stoppedAt = 0L
 
-    /** 每次从告警通知进入时加一，界面据此打开通知中心 */
-    private var openAlertsRequest by mutableIntStateOf(0)
+    /** 从通知 / 小部件 / 磁贴进来时要打开的页面；seq 每次加一，保证同一页面也能再次触发 */
+    private var openRequest by mutableStateOf<OpenRequest?>(null)
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* 拒绝也不影响使用 */ }
@@ -57,7 +66,7 @@ class MainActivity : FragmentActivity() {
                 when {
                     !lockChecked -> Unit
                     locked -> LockScreen(onUnlock = ::authenticate)
-                    else -> AppRoot(openAlertsRequest)
+                    else -> AppRoot(openRequest)
                 }
             }
         }
@@ -65,6 +74,14 @@ class MainActivity : FragmentActivity() {
             locked = savedInstanceState?.getBoolean(KEY_UNLOCKED) != true && lockEnabled()
             lockChecked = true
             if (locked) authenticate()
+        }
+        // 在前台期间，有进行中的下载就启动常驻下载通知（服务在没有下载后自己结束）
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                combine(snapshots.snapshot, devices.appSettings) { s, settings -> settings.downloadNotification && (s.activeDownloads ?: 0) > 0 }
+                    .distinctUntilChanged()
+                    .collect { if (it) DownloadProgressService.start(this@MainActivity) }
+            }
         }
         if (savedInstanceState == null) {
             handleIntent(intent)
@@ -87,6 +104,7 @@ class MainActivity : FragmentActivity() {
     override fun onStart() {
         super.onStart()
         connection.setForeground(true)
+        lifecycleScope.launch { snapshotUpdater.refreshIfStale() }
         // 在后台超过 1 分钟后回来需要重新验证
         if (stoppedAt > 0 && SystemClock.elapsedRealtime() - stoppedAt > RELOCK_AFTER_MS) {
             lifecycleScope.launch {
@@ -131,8 +149,8 @@ class MainActivity : FragmentActivity() {
         if (intent?.getBooleanExtra(UpdateNotifier.EXTRA_OPEN_UPDATE, false) == true) {
             updateManager.showDialog()
         }
-        if (intent?.getBooleanExtra(AlertNotifier.EXTRA_OPEN_ALERTS, false) == true) {
-            openAlertsRequest++
+        intent?.getStringExtra(AppLinks.EXTRA_OPEN)?.let { target ->
+            openRequest = OpenRequest(target, (openRequest?.seq ?: 0) + 1)
         }
     }
 

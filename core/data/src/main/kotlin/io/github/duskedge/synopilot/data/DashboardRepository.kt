@@ -44,6 +44,7 @@ class DashboardRepository(
     private val connection: ConnectionManager,
     private val repository: DeviceRepository,
     private val cacheDir: File,
+    private val snapshot: SnapshotStore? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val json = Json { ignoreUnknownKeys = true }
@@ -68,6 +69,7 @@ class DashboardRepository(
                         }
                         val samples = (data.network + NetSample(now, util.rxBytesPerSec, util.txBytesPerSec)).takeLast(60)
                         data = data.copy(utilization = util, network = samples, updatedAt = now, fromCache = false)
+                        snapshot?.update { it.copy(cpu = util.cpuPercent, memory = util.memoryPercent, temperature = data.info?.temperatureC ?: it.temperature) }
 
                         if (now - lastSlow >= SLOW_INTERVAL_MS) {
                             data = data.copy(
@@ -77,6 +79,7 @@ class DashboardRepository(
                             )
                             lastSlow = now
                             writeCache(data)
+                            data.storage?.let { st -> snapshot?.update { it.withStorage(st.totalBytes, st.usedBytes) } }
                         }
                         send(data)
                     } catch (e: CancellationException) {

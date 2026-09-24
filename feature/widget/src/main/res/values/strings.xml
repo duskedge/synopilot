@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_status_label">NAS 状态</string>
+    <string name="widget_status_description">CPU、内存、存储、容器和下载速度</string>
+    <string name="widget_downloads_label">下载进度</string>
+    <string name="widget_downloads_description">正在进行的下载任务</string>
+    <string name="tile_label">NAS</string>
+</resources>

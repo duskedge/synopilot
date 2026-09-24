@@ -3,6 +3,8 @@ package io.github.duskedge.synopilot
 import android.app.Application
 import io.github.duskedge.synopilot.data.AlertNotifier
 import io.github.duskedge.synopilot.data.AlertWorker
+import io.github.duskedge.synopilot.data.SnapshotUpdater
+import io.github.duskedge.synopilot.feature.widget.WidgetIntegration
 import io.github.duskedge.synopilot.data.dataModule
 import io.github.duskedge.synopilot.feature.containers.containersModule
 import io.github.duskedge.synopilot.feature.dashboard.dashboardModule
@@ -48,6 +50,8 @@ class SynoPilotApplication : Application() {
         get<UpdateNotifier>().createChannel()
         get<AlertNotifier>().createChannel()
         AlertWorker.schedule(this)
+        get<SnapshotUpdater>()
+        WidgetIntegration.install(this, get())
         if (updaterConfig.enabled) UpdateCheckWorker.schedule(this)
     }
 }

@@ -58,6 +58,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import io.github.duskedge.synopilot.data.AlertStore
+import io.github.duskedge.synopilot.data.AppLinks
 import io.github.duskedge.synopilot.data.ConnectionManager
 import io.github.duskedge.synopilot.data.ConnectionState
 import io.github.duskedge.synopilot.data.Device
@@ -97,10 +98,13 @@ import kotlin.reflect.KClass
 @Serializable data object AddDeviceRoute
 @Serializable data class ReloginRoute(val deviceId: String)
 
+/** 外部要求打开的页面（见 AppLinks） */
+data class OpenRequest(val target: String, val seq: Int)
+
 private data class Tab(val route: Any, val routeClass: KClass<*>, val item: SpNavItem)
 
 @Composable
-fun AppRoot(openAlertsRequest: Int = 0) {
+fun AppRoot(openRequest: OpenRequest? = null) {
     val repository: DeviceRepository = koinInject()
     val devices by repository.devices.collectAsStateWithLifecycle(initialValue = null)
     val updateManager: UpdateManager = koinInject()
@@ -111,19 +115,26 @@ fun AppRoot(openAlertsRequest: Int = 0) {
     when {
         devices == null || firstRun == null -> Box(Modifier.fillMaxSize().background(SpTheme.colors.bg))
         firstRun == true || devices!!.isEmpty() -> OnboardingScreen(onFinished = { firstRun = false })
-        else -> MainScaffold(updateManager, openAlertsRequest)
+        else -> MainScaffold(updateManager, openRequest)
     }
     UpdateDialog(updateManager)
 }
 
 @Composable
-private fun MainScaffold(updateManager: UpdateManager, openAlertsRequest: Int) {
+private fun MainScaffold(updateManager: UpdateManager, openRequest: OpenRequest?) {
     val nav = rememberNavController()
     val alertStore: AlertStore = koinInject()
     val unreadAlerts by alertStore.unread.collectAsStateWithLifecycle(initialValue = 0)
-    // 从告警通知点进来时打开通知中心
-    LaunchedEffect(openAlertsRequest) {
-        if (openAlertsRequest > 0) nav.navigate(SystemRoute(SystemPage.Notifications)) { launchSingleTop = true }
+    // 从通知、小部件、磁贴点进来时打开对应页面
+    LaunchedEffect(openRequest) {
+        when (openRequest?.target) {
+            AppLinks.ALERTS -> nav.navigate(SystemRoute(SystemPage.Notifications)) { launchSingleTop = true }
+            AppLinks.DOWNLOADS -> nav.navigate(DownloadsRoute) {
+                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+            }
+            AppLinks.DASHBOARD -> nav.backToTabs()
+        }
     }
     val connection: ConnectionManager = koinInject()
     val connectionState by connection.state.collectAsStateWithLifecycle()

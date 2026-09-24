@@ -41,6 +41,10 @@ class SettingsViewModel(
         viewModelScope.launch { repository.updateSettings { it.copy(biometricLock = on) } }
     }
 
+    fun setDownloadNotification(on: Boolean) {
+        viewModelScope.launch { repository.updateSettings { it.copy(downloadNotification = on) } }
+    }
+
     fun setPollSeconds(seconds: Int) {
         viewModelScope.launch { repository.updateSettings { it.copy(pollSeconds = seconds) } }
     }

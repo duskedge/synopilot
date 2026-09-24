@@ -21,11 +21,13 @@ fun dataModule(userAgent: String) = module {
     single { DeviceRepository(androidContext(), get()).also { it.startPinSync(get(APP_SCOPE)) } }
     single(DSM_HTTP) { DsmHttp.create(get<DeviceRepository>().trustedPins, userAgent) }
     single { ConnectionManager(get(), get(DSM_HTTP), get(APP_SCOPE)).also { it.start() } }
-    single { DashboardRepository(get(), get(), File(androidContext().cacheDir, "dashboard")) }
-    single { ContainersRepository(get()) }
-    single { DownloadsRepository(get(), get(), get(DSM_HTTP)) }
+    single { DashboardRepository(get(), get(), File(androidContext().cacheDir, "dashboard"), get()) }
+    single { ContainersRepository(get(), get()) }
+    single { DownloadsRepository(get(), get(), get(DSM_HTTP), get()) }
     single { FilesRepository(get()) }
     single { TransferManager(androidContext(), get(), get(APP_SCOPE)) }
+    single { SnapshotStore(androidContext(), get(APP_SCOPE)) }
+    single { SnapshotUpdater(get(), get(), get()).also { it.start(get(APP_SCOPE)) } }
     single { SystemRepository(get(), get()).also { it.start(get(APP_SCOPE)) } }
     single { AlertStore(androidContext()) }
     single { AlertNotifier(androidContext()) }

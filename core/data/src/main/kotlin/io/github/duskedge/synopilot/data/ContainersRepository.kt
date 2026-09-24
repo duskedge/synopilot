@@ -31,9 +31,12 @@ data class ContainersData(
 /** 容器列表每 5 秒刷新一次；操作后立即刷新。 */
 class ContainersRepository(
     private val connection: ConnectionManager,
+    private val snapshot: SnapshotStore? = null,
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     private val refresh = Channel<Unit>(Channel.CONFLATED)
+
+    @Volatile private var last: Pair<String, ContainersData>? = null
 
     fun refreshNow() {
         refresh.trySend(Unit)
@@ -44,7 +47,8 @@ class ContainersRepository(
             .map { (it as? ConnectionState.Connected)?.device?.id }
             .distinctUntilChanged()
             .collectLatest { deviceId ->
-                var data = ContainersData()
+                // 同一台 NAS 先显示上次的列表，避免每次切回页面都从空白开始
+                var data = last?.takeIf { it.first == deviceId }?.second ?: ContainersData()
                 send(data)
                 if (deviceId == null) return@collectLatest
                 var projectsAt = 0L
@@ -63,6 +67,9 @@ class ContainersRepository(
                             data.projects
                         }
                         data = ContainersData(containers, projects, loaded = true, updatedAt = now)
+                        snapshot?.update {
+                            it.withContainers(containers.count { c -> c.state == ContainerState.Running }, containers.count { c -> c.state == ContainerState.Exited })
+                        }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Unsupported) {
@@ -76,6 +83,7 @@ class ContainersRepository(
                     } catch (e: Exception) {
                         data = data.copy(loaded = true, error = e.message ?: "加载失败")
                     }
+                    last = deviceId to data
                     send(data)
                     // 等到下一个周期，或者被操作触发提前刷新
                     withTimeoutOrNull(POLL_MS) { refresh.receive() }

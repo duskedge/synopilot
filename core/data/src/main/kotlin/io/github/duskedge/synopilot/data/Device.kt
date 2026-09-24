@@ -97,6 +97,8 @@ data class AppSettings(
     val alertsEnabled: Boolean = true,
     /** 关闭了的告警规则（AlertRule 名） */
     val disabledAlertRules: Set<String> = emptySet(),
+    /** 有进行中的下载时显示常驻通知 */
+    val downloadNotification: Boolean = true,
 )
 
 object Addresses {

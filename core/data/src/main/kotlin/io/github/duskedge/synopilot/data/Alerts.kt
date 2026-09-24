@@ -5,7 +5,6 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
@@ -226,9 +225,7 @@ class AlertNotifier(private val context: Context) {
         ) {
             return
         }
-        val open = (context.packageManager.getLaunchIntentForPackage(context.packageName) ?: return)
-            .putExtra(EXTRA_OPEN_ALERTS, true)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        val open = AppLinks.open(context, AppLinks.ALERTS) ?: return
         val pending = PendingIntent.getActivity(context, 1, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_alert)
@@ -250,23 +247,28 @@ class AlertNotifier(private val context: Context) {
 
     companion object {
         const val CHANNEL_ID = "nas_alerts"
-        const val EXTRA_OPEN_ALERTS = "io.github.duskedge.synopilot.OPEN_ALERTS"
         private const val NOTIFICATION_ID = 2001
     }
 }
 
-/** 每 15 分钟在后台检查一次（系统允许的最短间隔）。 */
+/** 每 15 分钟在后台检查一次告警、刷新小部件（系统允许的最短间隔）。 */
 class AlertWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params), KoinComponent {
     private val repository: DeviceRepository by inject()
     private val connection: ConnectionManager by inject()
     private val checker: AlertChecker by inject()
+    private val snapshots: SnapshotUpdater by inject()
+    private val snapshotStore: SnapshotStore by inject()
 
     override suspend fun doWork(): Result {
-        if (!repository.appSettings.first().alertsEnabled) return Result.success()
         if (repository.currentDevice.first() == null) return Result.success()
         // App 冷启动时连接层刚开始连，最多等 45 秒
         withTimeoutOrNull(45_000) { connection.state.first { it is ConnectionState.Connected || it is ConnectionState.Failed } }
-        runCatching { checker.check() }.onFailure { Log.w(TAG, "告警检查失败", it) }
+        if (repository.appSettings.first().alertsEnabled) {
+            runCatching { checker.check() }.onFailure { Log.w(TAG, "告警检查失败", it) }
+        }
+        // 顺便刷新桌面小部件的数据
+        runCatching { snapshots.refresh() }
+        snapshotStore.flush()
         return Result.success()
     }
 

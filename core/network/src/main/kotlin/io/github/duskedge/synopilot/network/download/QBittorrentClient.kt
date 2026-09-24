@@ -27,7 +27,8 @@ import kotlinx.serialization.json.JsonElement
 
 /**
  * qBittorrent WebUI API v2。
- * - 登录后拿 Cookie SID；请求必须带 Referer，否则会被 CSRF 校验拒绝；
+ * - 登录后拿会话 Cookie：旧版叫 SID，5.x 起叫 QBT_SID_<端口>；请求必须带 Referer，否则会被 CSRF 校验拒绝；
+ * - 5.1 起登录成功返回 204（没有「Ok.」）；
  * - WebAPI ≥ 2.11（qBittorrent 5.0）起 pause/resume 改名为 stop/start。
  */
 class QBittorrentClient(
@@ -40,7 +41,8 @@ class QBittorrentClient(
     override val kind = EngineKind.QBittorrent
     private val base = DsmApi.normalizeBaseUrl(baseUrl)
     private val mutex = Mutex()
-    private var sid: String? = null
+    /** 完整的「名字=值」，如 SID=xxx 或 QBT_SID_8080=xxx */
+    private var sessionCookie: String? = null
     private var webApiVersion: String? = null
 
     private suspend fun login() {
@@ -51,18 +53,20 @@ class QBittorrentClient(
         val body = response.bodyAsText().trim()
         if (response.status == HttpStatusCode.Forbidden) throw DownloaderException("登录失败次数过多，qBittorrent 暂时封禁了这个 IP", authFailed = true)
         if (!response.status.isSuccess() || body.equals("Fails.", ignoreCase = true)) throw DownloaderException("qBittorrent 用户名或密码不正确", authFailed = true)
-        sid = response.headers.getAll(HttpHeaders.SetCookie).orEmpty()
-            .firstNotNullOfOrNull { c -> c.split(';').firstOrNull()?.trim()?.takeIf { it.startsWith("SID=") }?.removePrefix("SID=") }
-        // 关闭了身份验证（或白名单免登录）时没有 SID，直接可用
+        sessionCookie = sessionCookie(response.headers.getAll(HttpHeaders.SetCookie).orEmpty())
+        // 关闭了身份验证（或白名单免登录）时没有会话 Cookie，直接可用
     }
 
     /** 带登录态发请求；403 时重新登录一次 */
     private suspend fun request(block: suspend (cookie: String?) -> HttpResponse): HttpResponse {
-        mutex.withLock { if (sid == null) login() }
-        var response = block(sid?.let { "SID=$it" })
+        mutex.withLock { if (sessionCookie == null) login() }
+        var response = block(sessionCookie)
         if (response.status == HttpStatusCode.Forbidden) {
             mutex.withLock { login() }
-            response = block(sid?.let { "SID=$it" })
+            response = block(sessionCookie)
+        }
+        if (response.status == HttpStatusCode.Forbidden) {
+            throw DownloaderException("qBittorrent 拒绝了请求（403）：登录后仍然没有权限，检查反向代理是否转发了 Cookie，以及 WebUI 的「Host 头验证」设置")
         }
         if (!response.status.isSuccess()) throw DownloaderException("qBittorrent 请求失败（HTTP ${response.status.value}）")
         return response
@@ -150,6 +154,11 @@ class QBittorrentClient(
             .orEmpty()
 
     companion object {
+        /** 从 Set-Cookie 里找会话 Cookie（SID 或 QBT_SID_<端口>），返回「名字=值」 */
+        internal fun sessionCookie(setCookies: List<String>): String? = setCookies
+            .mapNotNull { it.substringBefore(';').trim().takeIf { c -> '=' in c } }
+            .firstOrNull { c -> c.substringBefore('=').let { it == "SID" || it.startsWith("QBT_SID") } }
+
         /** qBittorrent 用 8640000 表示「无穷大」 */
         private const val ETA_INFINITY = 8_640_000L
 

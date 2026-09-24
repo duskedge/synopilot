@@ -93,6 +93,30 @@ class DownloadersTest {
     }
 
     @Test
+    fun `qBittorrent 5 的会话 Cookie 叫 QBT_SID_端口，登录成功返回 204`() = runTest {
+        assertEquals(
+            "QBT_SID_28888=abc",
+            QBittorrentClient.sessionCookie(listOf("QBT_SID_28888=abc; HttpOnly; expires=Thu, 24-Sep-2026 02:37:31 GMT; path=/")),
+        )
+        assertEquals("SID=x", QBittorrentClient.sessionCookie(listOf("other=1; path=/", "SID=x; HttpOnly")))
+        assertNull(QBittorrentClient.sessionCookie(listOf("other=1")))
+
+        val cookies = mutableListOf<String?>()
+        val engine = MockEngine { r ->
+            when (r.url.encodedPath) {
+                "/api/v2/auth/login" -> respond("", HttpStatusCode.NoContent, headersOf(HttpHeaders.SetCookie, "QBT_SID_28888=s5; HttpOnly; path=/"))
+                else -> {
+                    cookies += r.headers[HttpHeaders.Cookie]
+                    respond("v5.2.3")
+                }
+            }
+        }
+        val qb = QBittorrentClient("qb", HttpClient(engine) { expectSuccess = false }, "https://qb.example.com:4443", "admin", "pw")
+        assertEquals("v5.2.3", qb.version().app)
+        assertTrue(cookies.all { it == "QBT_SID_28888=s5" })
+    }
+
+    @Test
     fun `qBittorrent 密码错误`() = runTest {
         val engine = MockEngine { respond("Fails.") }
         val qb = QBittorrentClient("qb", HttpClient(engine) { expectSuccess = false }, "http://nas:8080", "admin", "bad")

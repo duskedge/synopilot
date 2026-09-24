@@ -81,3 +81,7 @@ scripts/             发布脚本；dev/mock-dsm.py 是开发用的假 DSM
 ## 第三方资源
 
 - 数字字体 [Archivo](https://github.com/Omnibus-Type/Archivo)，SIL Open Font License 1.1（见 `core/designsystem/licenses/`）。
+
+## 许可证
+
+[MIT](LICENSE)

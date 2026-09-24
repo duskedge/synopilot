@@ -29,6 +29,9 @@ import androidx.compose.ui.unit.dp
 import io.github.duskedge.synopilot.designsystem.SpTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 
 /** 一条提示；[actionLabel] 不为空时显示一个操作（如「撤销」）。 */
 data class SpMessage(
@@ -38,6 +41,16 @@ data class SpMessage(
     /** 同样文字的提示连续出现时，用它区分 */
     val id: Long = System.nanoTime(),
 )
+
+/** 全局提示：没有自己提示条的页面（比如设置页里的分组）把提示发到这里，由主界面显示。 */
+object SpMessageBus {
+    private val _messages = MutableSharedFlow<SpMessage>(extraBufferCapacity = 16)
+    val messages: SharedFlow<SpMessage> = _messages.asSharedFlow()
+
+    fun post(message: SpMessage) {
+        _messages.tryEmit(message)
+    }
+}
 
 /** 屏幕底部的深色提示条，3 秒后消失（带操作时 5 秒）。放在 Box 里使用。 */
 @Composable

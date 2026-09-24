@@ -81,7 +81,7 @@ fun DashboardScreen(
             .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        ConnectionBanner(ui.connection, data, onRetry = viewModel::retry, onRelogin = onRelogin, onOpenServerAddress = onOpenServerAddress)
+        ConnectionBanner(ui.connection, data, onRetry = viewModel::retry, onRelogin = onRelogin, onOpenServerAddress = onOpenServerAddress, onWake = viewModel::wake)
 
         if (data?.info == null && data?.utilization == null) {
             if (ui.connection is ConnectionState.Connecting || ui.connection is ConnectionState.Connected) {
@@ -158,6 +158,7 @@ private fun ConnectionBanner(
     onRetry: () -> Unit,
     onRelogin: (String) -> Unit,
     onOpenServerAddress: () -> Unit,
+    onWake: () -> Unit,
 ) {
     val cacheNote = data?.takeIf { it.fromCache && it.updatedAt > 0 }?.let {
         val ago = SpFormat.ago(it.updatedAt)
@@ -186,6 +187,9 @@ private fun ConnectionBanner(
                 actions = {
                     SpButton("重试", onClick = onRetry, size = SpButtonSize.Small)
                     SpButton("服务端地址", onClick = onOpenServerAddress, variant = SpButtonVariant.Tonal, size = SpButtonSize.Small)
+                    if (state.device.macAddresses.isNotEmpty()) {
+                        SpButton("网络唤醒", onClick = onWake, variant = SpButtonVariant.Tonal, size = SpButtonSize.Small)
+                    }
                 },
             )
         }

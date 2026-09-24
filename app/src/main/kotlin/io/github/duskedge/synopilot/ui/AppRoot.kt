@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.Dns
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.SpaceDashboard
 import androidx.compose.material.icons.outlined.ViewInAr
@@ -36,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -55,18 +57,24 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import io.github.duskedge.synopilot.data.AlertStore
 import io.github.duskedge.synopilot.data.ConnectionManager
 import io.github.duskedge.synopilot.data.ConnectionState
 import io.github.duskedge.synopilot.data.Device
 import io.github.duskedge.synopilot.data.DeviceRepository
 import io.github.duskedge.synopilot.designsystem.SpTheme
 import io.github.duskedge.synopilot.designsystem.component.SpBottomBar
+import io.github.duskedge.synopilot.designsystem.component.SpMessageBus
+import io.github.duskedge.synopilot.designsystem.component.SpMessageHost
 import io.github.duskedge.synopilot.designsystem.component.SpNavItem
 import io.github.duskedge.synopilot.feature.containers.ContainersScreen
 import io.github.duskedge.synopilot.feature.dashboard.DashboardScreen
 import io.github.duskedge.synopilot.feature.downloads.DownloadersScreen
 import io.github.duskedge.synopilot.feature.downloads.DownloadsScreen
 import io.github.duskedge.synopilot.feature.files.FilesScreen
+import io.github.duskedge.synopilot.feature.system.SystemPage
+import io.github.duskedge.synopilot.feature.system.SystemPageScreen
+import io.github.duskedge.synopilot.feature.system.SystemSettingsSections
 import io.github.duskedge.synopilot.feature.onboarding.OnboardingScreen
 import io.github.duskedge.synopilot.feature.settings.DeviceSwitcherSheet
 import io.github.duskedge.synopilot.feature.settings.ServerAddressScreen
@@ -85,13 +93,14 @@ import kotlin.reflect.KClass
 @Serializable data object SettingsRoute
 @Serializable data object ServerAddressRoute
 @Serializable data object DownloadersRoute
+@Serializable data class SystemRoute(val page: SystemPage)
 @Serializable data object AddDeviceRoute
 @Serializable data class ReloginRoute(val deviceId: String)
 
 private data class Tab(val route: Any, val routeClass: KClass<*>, val item: SpNavItem)
 
 @Composable
-fun AppRoot() {
+fun AppRoot(openAlertsRequest: Int = 0) {
     val repository: DeviceRepository = koinInject()
     val devices by repository.devices.collectAsStateWithLifecycle(initialValue = null)
     val updateManager: UpdateManager = koinInject()
@@ -102,14 +111,20 @@ fun AppRoot() {
     when {
         devices == null || firstRun == null -> Box(Modifier.fillMaxSize().background(SpTheme.colors.bg))
         firstRun == true || devices!!.isEmpty() -> OnboardingScreen(onFinished = { firstRun = false })
-        else -> MainScaffold(updateManager)
+        else -> MainScaffold(updateManager, openAlertsRequest)
     }
     UpdateDialog(updateManager)
 }
 
 @Composable
-private fun MainScaffold(updateManager: UpdateManager) {
+private fun MainScaffold(updateManager: UpdateManager, openAlertsRequest: Int) {
     val nav = rememberNavController()
+    val alertStore: AlertStore = koinInject()
+    val unreadAlerts by alertStore.unread.collectAsStateWithLifecycle(initialValue = 0)
+    // 从告警通知点进来时打开通知中心
+    LaunchedEffect(openAlertsRequest) {
+        if (openAlertsRequest > 0) nav.navigate(SystemRoute(SystemPage.Notifications)) { launchSingleTop = true }
+    }
     val connection: ConnectionManager = koinInject()
     val connectionState by connection.state.collectAsStateWithLifecycle()
     val updateState by updateManager.state.collectAsStateWithLifecycle()
@@ -123,12 +138,14 @@ private fun MainScaffold(updateManager: UpdateManager) {
         Tab(FilesRoute, FilesRoute::class, SpNavItem("文件", Icons.Outlined.Folder, Icons.Filled.Folder)),
         Tab(SettingsRoute, SettingsRoute::class, SpNavItem("设置", Icons.Outlined.Settings, Icons.Filled.Settings, badge = hasUpdate)),
     )
-    val destination = nav.currentBackStackEntryAsState().value?.destination
+    val backStackEntry = nav.currentBackStackEntryAsState().value
+    val destination = backStackEntry?.destination
     val tabIndex = tabs.indexOfFirst { destination?.hasRoute(it.routeClass) == true }
     val fullScreen = destination?.hasRoute(AddDeviceRoute::class) == true || destination?.hasRoute(ReloginRoute::class) == true
     val subPageTitle = when {
         destination?.hasRoute(ServerAddressRoute::class) == true -> "服务端地址"
         destination?.hasRoute(DownloadersRoute::class) == true -> "下载器"
+        destination?.hasRoute(SystemRoute::class) == true -> backStackEntry?.toRoute<SystemRoute>()?.page?.title
         else -> null
     }
 
@@ -137,7 +154,12 @@ private fun MainScaffold(updateManager: UpdateManager) {
             if (subPageTitle != null) {
                 SubPageBar(subPageTitle, onBack = { nav.popBackStack() })
             } else {
-                DeviceBar(connectionState, onClick = { switching = true })
+                DeviceBar(
+                    connectionState,
+                    unreadAlerts = unreadAlerts,
+                    onClick = { switching = true },
+                    onBell = { nav.navigate(SystemRoute(SystemPage.Notifications)) { launchSingleTop = true } },
+                )
             }
         }
         Box(Modifier.weight(1f)) {
@@ -156,10 +178,12 @@ private fun MainScaffold(updateManager: UpdateManager) {
                         onOpenServerAddress = { nav.navigate(ServerAddressRoute) },
                         onAddDevice = { nav.navigate(AddDeviceRoute) },
                         onOpenDownloaders = { nav.navigate(DownloadersRoute) },
+                        systemSections = { SystemSettingsSections(onOpen = { nav.navigate(SystemRoute(it)) }) },
                     )
                 }
                 composable<ServerAddressRoute> { ServerAddressScreen() }
                 composable<DownloadersRoute> { DownloadersScreen() }
+                composable<SystemRoute> { entry -> SystemPageScreen(entry.toRoute<SystemRoute>().page) }
                 composable<AddDeviceRoute> {
                     OnboardingScreen(onFinished = { nav.backToTabs() }, onCancel = { nav.popBackStack() })
                 }
@@ -168,6 +192,7 @@ private fun MainScaffold(updateManager: UpdateManager) {
                     OnboardingScreen(deviceId = route.deviceId, onFinished = { nav.backToTabs() }, onCancel = { nav.popBackStack() })
                 }
             }
+            SpMessageHost(SpMessageBus.messages)
         }
         if (!fullScreen && subPageTitle == null) {
             SpBottomBar(
@@ -195,7 +220,7 @@ private fun NavHostController.backToTabs() {
 
 /** 顶栏：设备名 + 连接状态点，点击切换设备。单行、无外框。 */
 @Composable
-private fun DeviceBar(state: ConnectionState, onClick: () -> Unit) {
+private fun DeviceBar(state: ConnectionState, unreadAlerts: Int, onClick: () -> Unit, onBell: () -> Unit) {
     val c = SpTheme.colors
     val device: Device? = state.deviceOrNull
     val dot = when (state) {
@@ -237,6 +262,23 @@ private fun DeviceBar(state: ConnectionState, onClick: () -> Unit) {
         Box(Modifier.weight(1f))
         if (state is ConnectionState.Connecting) {
             CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = c.onSurfaceVariant)
+        }
+        Box(
+            Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).clickable(onClickLabel = "通知", onClick = onBell),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Outlined.Notifications, contentDescription = if (unreadAlerts > 0) "通知，$unreadAlerts 条未读" else "通知", tint = c.onSurface, modifier = Modifier.size(21.dp))
+            if (unreadAlerts > 0) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-7).dp, y = 7.dp)
+                        .size(8.dp)
+                        .background(c.bg, CircleShape)
+                        .padding(1.5.dp)
+                        .background(c.error, CircleShape),
+                )
+            }
         }
     }
 }

@@ -26,5 +26,9 @@ fun dataModule(userAgent: String) = module {
     single { DownloadsRepository(get(), get(), get(DSM_HTTP)) }
     single { FilesRepository(get()) }
     single { TransferManager(androidContext(), get(), get(APP_SCOPE)) }
+    single { SystemRepository(get(), get()).also { it.start(get(APP_SCOPE)) } }
+    single { AlertStore(androidContext()) }
+    single { AlertNotifier(androidContext()) }
+    single { AlertChecker(get(), get(), get(), get()) }
     single { LanDiscovery(androidContext(), get(DSM_HTTP)) }
 }

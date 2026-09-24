@@ -14,6 +14,7 @@ import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_WEAK
 import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
 import androidx.biometric.BiometricPrompt
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
@@ -21,6 +22,8 @@ import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import io.github.duskedge.synopilot.data.DeviceRepository
 import io.github.duskedge.synopilot.designsystem.SynoPilotTheme
+import io.github.duskedge.synopilot.data.AlertNotifier
+import io.github.duskedge.synopilot.data.ConnectionManager
 import io.github.duskedge.synopilot.ui.AppRoot
 import io.github.duskedge.synopilot.ui.LockScreen
 import io.github.duskedge.synopilot.updater.UpdateManager
@@ -34,10 +37,14 @@ class MainActivity : FragmentActivity() {
 
     private val updateManager: UpdateManager by inject()
     private val devices: DeviceRepository by inject()
+    private val connection: ConnectionManager by inject()
 
     private var locked by mutableStateOf(false)
     private var lockChecked by mutableStateOf(false)
     private var stoppedAt = 0L
+
+    /** 每次从告警通知进入时加一，界面据此打开通知中心 */
+    private var openAlertsRequest by mutableIntStateOf(0)
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* 拒绝也不影响使用 */ }
@@ -50,7 +57,7 @@ class MainActivity : FragmentActivity() {
                 when {
                     !lockChecked -> Unit
                     locked -> LockScreen(onUnlock = ::authenticate)
-                    else -> AppRoot()
+                    else -> AppRoot(openAlertsRequest)
                 }
             }
         }
@@ -74,10 +81,12 @@ class MainActivity : FragmentActivity() {
     override fun onStop() {
         super.onStop()
         stoppedAt = SystemClock.elapsedRealtime()
+        connection.setForeground(false)
     }
 
     override fun onStart() {
         super.onStart()
+        connection.setForeground(true)
         // 在后台超过 1 分钟后回来需要重新验证
         if (stoppedAt > 0 && SystemClock.elapsedRealtime() - stoppedAt > RELOCK_AFTER_MS) {
             lifecycleScope.launch {
@@ -121,6 +130,9 @@ class MainActivity : FragmentActivity() {
     private fun handleIntent(intent: Intent?) {
         if (intent?.getBooleanExtra(UpdateNotifier.EXTRA_OPEN_UPDATE, false) == true) {
             updateManager.showDialog()
+        }
+        if (intent?.getBooleanExtra(AlertNotifier.EXTRA_OPEN_ALERTS, false) == true) {
+            openAlertsRequest++
         }
     }
 

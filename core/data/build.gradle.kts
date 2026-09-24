@@ -11,6 +11,8 @@ dependencies {
     api(project(":core:network"))
     implementation(project(":core:security"))
     implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.work.runtime)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(platform(libs.koin.bom))

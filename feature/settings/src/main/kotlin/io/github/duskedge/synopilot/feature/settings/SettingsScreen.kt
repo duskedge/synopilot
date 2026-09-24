@@ -91,6 +91,8 @@ fun SettingsScreen(
     onOpenServerAddress: () -> Unit,
     onAddDevice: () -> Unit,
     onOpenDownloaders: () -> Unit,
+    /** 电源 / 系统 / 安全 / 通知几组入口（由 system 模块提供） */
+    systemSections: @Composable () -> Unit = {},
     viewModel: SettingsViewModel = koinViewModel(),
     updateManager: UpdateManager = koinInject(),
 ) {
@@ -149,6 +151,8 @@ fun SettingsScreen(
                 onClick = onAddDevice,
             )
         }
+
+        systemSections()
 
         SpSectionHeader("应用")
         SpListGroup {

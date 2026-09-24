@@ -18,6 +18,8 @@
   qBittorrent WebUI   /api/v2/*（admin / adminadmin）
   Transmission RPC    /transmission/rpc（无密码，会先返回 409 要求会话 ID）
   File Station        内存里的虚拟文件系统：浏览、搜索、上传、下载、缩略图、分享链接
+  系统                重启（之后 15 秒不可用）/ 关机、定时开关机、DSM 更新、Hyper Backup、进程、
+                      自动封锁、当前连接、证书（10 天后到期，用来触发告警）
 容器 qbittorrent / transmission 的端口映射指向这个端口，所以「自动发现」能直接用。
 """
 import argparse
@@ -49,9 +51,14 @@ APIS = {
     **{f"SYNO.FileStation.{n}": {"path": "entry.cgi", "minVersion": 1, "maxVersion": v} for n, v in [
         ("List", 2), ("Search", 2), ("CreateFolder", 2), ("Rename", 2), ("Delete", 2), ("Download", 2), ("Thumb", 2),
         ("Upload", 3), ("Sharing", 3)]},
+    **{n: {"path": "entry.cgi", "minVersion": 1, "maxVersion": 2} for n in [
+        "SYNO.Core.System", "SYNO.Core.Hardware.PowerSchedule", "SYNO.Core.Network.Ethernet", "SYNO.Core.Upgrade.Server",
+        "SYNO.Backup.Task", "SYNO.Core.System.Process", "SYNO.Core.Security.AutoBlock.Rules", "SYNO.Core.CurrentConnection",
+        "SYNO.Core.Certificate.CRT"]},
 }
 PORT = 5000
 LOCK = threading.Lock()
+DOWN_UNTIL = [0.0]
 GB = 1024 ** 3
 MB = 1024 ** 2
 
@@ -369,6 +376,82 @@ def upload(params, body, ctype):
     return ok({})
 
 
+# ---- 系统 / 安全 ------------------------------------------------------------
+SCHEDULE = {"poweron_tasks": [{"enabled": True, "hour": 8, "min": 0, "weekdays": "0,1,2,3,4,5,6"}],
+            "poweroff_tasks": [{"enabled": True, "hour": 1, "min": 30, "weekdays": "0,1,2,3,4"}]}
+BLOCKED = [{"ip": "185.220.101.%d" % i, "recorded_time": NOW - i * 3000, "expire_time": 0, "deny": True} for i in (3, 17, 42)] + \
+          [{"ip": "45.155.205.99", "recorded_time": NOW - 9 * 86400, "expire_time": NOW + 86400, "deny": True}]
+CONNECTIONS = [
+    {"who": "admin", "from": "192.168.1.23", "time": "2026/09/23 20:11:02", "type": "HTTP/HTTPS", "descr": "DSM", "can_be_kicked": True, "pid": 3121},
+    {"who": "admin", "from": "10.0.2.16", "time": "2026/09/23 21:40:17", "type": "HTTP/HTTPS", "descr": "SynoPilot", "can_be_kicked": False, "pid": 3301},
+    {"who": "family", "from": "192.168.1.40", "time": "2026/09/23 18:02:55", "type": "SMB", "descr": "Windows 文件共享", "can_be_kicked": True, "pid": 2210},
+]
+BACKUPS = [
+    {"task_id": 1, "name": "照片 → C2 Storage", "target_type": "cloud", "state": "idle", "last_bkp_result": "failed",
+     "last_bkp_time": time.strftime("%Y/%m/%d 01:30", time.localtime(NOW - 86400)), "next_bkp_time": time.strftime("%Y/%m/%d 01:30", time.localtime(NOW + 3600 * 3))},
+    {"task_id": 2, "name": "docker 配置 → USB 硬盘", "target_type": "local", "state": "idle", "last_bkp_result": "done",
+     "last_bkp_time": time.strftime("%Y/%m/%d 03:00", time.localtime(NOW - 3600 * 18)), "next_bkp_time": time.strftime("%Y/%m/%d 03:00", time.localtime(NOW + 3600 * 6))},
+]
+
+
+def cert_time(ts):
+    return time.strftime("%b %d %H:%M:%S %Y GMT", time.gmtime(ts))
+
+
+def system(api, method, params):
+    with LOCK:
+        if api == "SYNO.Core.System":
+            if method in ("reboot", "shutdown"):
+                SESSIONS.clear()
+                DOWN_UNTIL[0] = time.time() + (15 if method == "reboot" else 10 ** 9)
+                return ok({})
+        if api == "SYNO.Core.Hardware.PowerSchedule":
+            if method == "save":
+                SCHEDULE["poweron_tasks"] = json.loads(params.get("poweron_tasks", "[]"))
+                SCHEDULE["poweroff_tasks"] = json.loads(params.get("poweroff_tasks", "[]"))
+                return ok({})
+            return ok(SCHEDULE)
+        if api == "SYNO.Core.Network.Ethernet":
+            return ok([{"ifname": "eth0", "mac": "00:11:32:AB:CD:EF", "ip": "192.168.1.10"},
+                       {"ifname": "eth1", "mac": "00:11:32:AB:CD:F0", "ip": ""}])
+        if api == "SYNO.Core.Upgrade.Server":
+            time.sleep(1)
+            return ok({"update": {"available": True, "version": "DSM 7.2.2-72806 Update 3", "reboot": "now"}})
+        if api == "SYNO.Backup.Task":
+            if method == "backup":
+                for t in BACKUPS:
+                    if str(t["task_id"]) == params.get("task_id"):
+                        t["state"], t["last_bkp_result"] = "backingup", "backingup"
+                return ok({})
+            return ok({"task_list": BACKUPS, "total": len(BACKUPS)})
+        if api == "SYNO.Core.System.Process":
+            names = ["/usr/bin/synoscgi", "/volume1/@appstore/ContainerManager/usr/bin/dockerd", "jellyfin", "qbittorrent-nox",
+                     "/usr/syno/sbin/synostoraged", "smbd", "nginx: worker process", "postgres", "synologand", "python3 hass"]
+            return ok({"process": [{"pid": 1000 + i, "command": n, "cpu": "%.1f" % random.uniform(0, 25), "mem": random.randint(20, 900) * 1024}
+                                   for i, n in enumerate(names)]})
+        if api == "SYNO.Core.Security.AutoBlock.Rules":
+            if method == "delete":
+                ips = json_list(params.get("ip"))
+                BLOCKED[:] = [b for b in BLOCKED if b["ip"] not in ips]
+                return ok({})
+            return ok({"ip_info": BLOCKED, "total": len(BLOCKED)})
+        if api == "SYNO.Core.CurrentConnection":
+            if method == "kick_connection":
+                targets = json.loads(params.get("http_conn", "[]"))
+                pids = {t.get("pid") for t in targets}
+                CONNECTIONS[:] = [c for c in CONNECTIONS if c["pid"] not in pids]
+                return ok({})
+            return ok({"items": CONNECTIONS, "total": len(CONNECTIONS)})
+        if api == "SYNO.Core.Certificate.CRT":
+            return ok({"certificates": [
+                {"id": "abc123", "desc": "", "is_default": True, "issuer": {"common_name": "R11", "organization": "Let's Encrypt"},
+                 "subject": {"common_name": "*.homelab.me", "sub_alt_name": ["homelab.me", "*.homelab.me"]}, "valid_till": cert_time(NOW + 10 * 86400)},
+                {"id": "syno", "desc": "Synology", "is_default": False, "issuer": {"common_name": "Synology Inc. CA"},
+                 "subject": {"common_name": "synology"}, "valid_till": cert_time(NOW + 400 * 86400)},
+            ]})
+    return err(103)
+
+
 def download_station(api, method, params):
     with LOCK:
         tick()
@@ -555,6 +638,10 @@ def handle(api, method, params):
                 {"device": "total", "rx": random.randint(8, 50) * 1024 * 1024, "tx": random.randint(1, 10) * 1024 * 1024},
                 {"device": "eth0", "rx": 0, "tx": 0},
             ],
+            "disk": {"disk": [{"device": f"sata{i}", "display_name": f"硬盘 {i}", "read_byte": random.randint(0, 80) * MB,
+                               "write_byte": random.randint(0, 30) * MB, "utilization": random.randint(2, 70)} for i in range(1, 5)]},
+            "space": {"volume": [{"device": "md2", "display_name": "存储空间 1", "read_byte": random.randint(0, 120) * MB,
+                                  "write_byte": random.randint(0, 40) * MB, "utilization": random.randint(5, 60)}]},
         })
     if api == "SYNO.Storage.CGI.Storage":
         disk = lambda i, model, vendor, temp, status, size, ssd=False, prefix="sata": {
@@ -585,6 +672,8 @@ def handle(api, method, params):
         return download_station(api, method, params)
     if api.startswith("SYNO.FileStation."):
         return file_station(api, method, params)
+    if api in APIS and APIS[api]["path"] == "entry.cgi" and api.split(".")[1] in ("Core", "Backup"):
+        return system(api, method, params)
     return err(103)
 
 
@@ -620,8 +709,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route(self):
         path = urlparse(self.path).path
+        if time.time() < DOWN_UNTIL[0]:
+            # 模拟重启中：直接断开连接
+            self.close_connection = True
+            return
         params, body = self._read()
         self._api = params.get("api", "")
+        if path == "/debug/exit":
+            # 调试告警用：让一个容器异常退出，如 /debug/exit?name=jellyfin&code=1
+            with LOCK:
+                c = CONTAINERS.get(params.get("name", ""))
+                if c:
+                    c.update(status="exited", exit=int(params.get("code", "1")))
+            return self._send(ok({}))
         if path == "/webapi/query.cgi":
             q = params.get("query", "all")
             data = APIS if q == "all" else {k: v for k, v in APIS.items() if k in q.split(",")}

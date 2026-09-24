@@ -39,6 +39,8 @@ data class Device(
     val downloaders: List<DownloaderConfig> = emptyList(),
     /** 添加任务时默认使用的下载器 */
     val defaultDownloaderId: String = "",
+    /** 网卡 MAC，用于网络唤醒（连上时自动更新） */
+    val macAddresses: List<String> = emptyList(),
 ) {
     /** 这台 NAS 在局域网里的主机名/IP（来自主地址或备用地址），用于拼容器端口地址 */
     val lanHost: String? get() = listOf(primaryUrl, backupUrl)
@@ -91,6 +93,10 @@ data class DownloaderConfig(
 data class AppSettings(
     val biometricLock: Boolean = false,
     val pollSeconds: Int = 3,
+    /** 后台定时检查告警 */
+    val alertsEnabled: Boolean = true,
+    /** 关闭了的告警规则（AlertRule 名） */
+    val disabledAlertRules: Set<String> = emptySet(),
 )
 
 object Addresses {

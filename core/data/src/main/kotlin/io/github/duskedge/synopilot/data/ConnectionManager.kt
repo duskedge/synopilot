@@ -14,8 +14,10 @@ import io.github.duskedge.synopilot.network.SystemInfo
 import io.ktor.client.HttpClient
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,7 +83,34 @@ class ConnectionManager(
     private var api: DsmApi? = null
     private var session: DsmSession? = null
 
+    /** App 在前台时才自动重试（后台检查由 WorkManager 负责，不在这里反复重连） */
+    @Volatile private var foreground = false
+    private var retryJob: Job? = null
+    private var retryAttempt = 0
+
+    fun setForeground(value: Boolean) {
+        foreground = value
+        if (value && (_state.value as? ConnectionState.Failed)?.reason is FailureReason.Offline) reconnect()
+    }
+
     fun start() {
+        scope.launch {
+            // 连不上时按 5、10、15、30、60 秒的间隔自动重试（比如 NAS 正在重启）
+            _state.collect { s ->
+                retryJob?.cancel()
+                when {
+                    s is ConnectionState.Connected -> retryAttempt = 0
+                    s is ConnectionState.Failed && s.reason is FailureReason.Offline && foreground -> {
+                        val wait = RETRY_DELAYS_MS[retryAttempt.coerceAtMost(RETRY_DELAYS_MS.lastIndex)]
+                        retryAttempt++
+                        retryJob = scope.launch {
+                            delay(wait)
+                            if (foreground) reconnect()
+                        }
+                    }
+                }
+            }
+        }
         scope.launch {
             // 设备本身或它的地址配置变化时重新连接
             repository.currentDevice
@@ -269,6 +298,8 @@ class ConnectionManager(
     }
 
     companion object {
+        private val RETRY_DELAYS_MS = longArrayOf(5_000, 10_000, 15_000, 30_000, 60_000)
+
         fun describe(failure: ProbeFailure?): String = when (failure) {
             null -> "正常"
             ProbeFailure.Timeout -> "连接超时"

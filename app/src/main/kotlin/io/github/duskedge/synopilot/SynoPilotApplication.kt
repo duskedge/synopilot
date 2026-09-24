@@ -1,11 +1,14 @@
 package io.github.duskedge.synopilot
 
 import android.app.Application
+import io.github.duskedge.synopilot.data.AlertNotifier
+import io.github.duskedge.synopilot.data.AlertWorker
 import io.github.duskedge.synopilot.data.dataModule
 import io.github.duskedge.synopilot.feature.containers.containersModule
 import io.github.duskedge.synopilot.feature.dashboard.dashboardModule
 import io.github.duskedge.synopilot.feature.downloads.downloadsModule
 import io.github.duskedge.synopilot.feature.files.filesModule
+import io.github.duskedge.synopilot.feature.system.systemModule
 import io.github.duskedge.synopilot.feature.onboarding.onboardingModule
 import io.github.duskedge.synopilot.feature.settings.settingsModule
 import io.github.duskedge.synopilot.updater.UpdateCheckWorker
@@ -38,10 +41,13 @@ class SynoPilotApplication : Application() {
                 containersModule,
                 downloadsModule,
                 filesModule,
+                systemModule,
                 settingsModule,
             )
         }
         get<UpdateNotifier>().createChannel()
+        get<AlertNotifier>().createChannel()
+        AlertWorker.schedule(this)
         if (updaterConfig.enabled) UpdateCheckWorker.schedule(this)
     }
 }
